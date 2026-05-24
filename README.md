@@ -91,6 +91,21 @@ If the cache is missing or older than 24 hours, the app falls back to local rese
 swift run AiUsageMenu
 ```
 
+## Install On macOS
+
+Install the latest GitHub release into `~/Applications` and launch it:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/happenings-dk/ai-usage/main/scripts/install.sh | bash
+```
+
+Override the install directory if needed:
+
+```sh
+AI_USAGE_INSTALL_DIR="/Applications" \
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/happenings-dk/ai-usage/main/scripts/install.sh)"
+```
+
 ## Build App Bundle
 
 ```sh
@@ -139,7 +154,7 @@ To point a local build at another repository:
 
 ```sh
 mkdir -p ~/.ai-usage
-echo "owner/repo" > ~/.ai-usage/github-repo
+echo "happenings-dk/ai-usage" > ~/.ai-usage/github-repo
 ```
 
 ## Optional JSON Update Feed
@@ -148,7 +163,7 @@ GitHub Releases are the default. A plain JSON feed is also supported via:
 
 ```sh
 mkdir -p ~/.ai-usage
-echo "https://example.com/ai-usage/update.json" > ~/.ai-usage/update-feed-url
+echo "https://github.com/happenings-dk/ai-usage/releases/latest/download/update.json" > ~/.ai-usage/update-feed-url
 ```
 
 Feed format:
@@ -156,7 +171,7 @@ Feed format:
 ```json
 {
   "version": "0.2.0",
-  "download_url": "https://example.com/AIUsageMenu-0.2.0.zip"
+  "download_url": "https://github.com/happenings-dk/ai-usage/releases/download/v0.2.0/AIUsageMenu-0.2.0.zip"
 }
 ```
 
@@ -182,4 +197,3 @@ open .build/release/AiUsageMenu.app
 - Swift 6 toolchain for local builds
 - `jq` for the Claude status-line exporter
 - `npm` for latest CLI version checks
-
