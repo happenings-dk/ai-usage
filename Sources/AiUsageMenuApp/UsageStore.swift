@@ -5,16 +5,21 @@ final class UsageStore {
     private let maxFilesPerSource = 120
 
     func loadSnapshot(now: Date) throws -> UsageSnapshot {
-        let claude = loadClaudeSummary(now: now)
-        let codex = loadCodexSummary(now: now)
-        let gemini = loadGeminiSummary(now: now)
+        let summaries = loadUsageSummaries(now: now)
         let versionSnapshot = VersionStore().load(now: now)
         return UsageSnapshot(
             generatedAt: now,
-            summaries: [claude, codex, gemini],
+            summaries: summaries,
             cliVersions: versionSnapshot.cliVersions,
             appUpdate: versionSnapshot.appUpdate
         )
+    }
+
+    func loadUsageSummaries(now: Date) -> [SourceUsageSummary] {
+        let claude = loadClaudeSummary(now: now)
+        let codex = loadCodexSummary(now: now)
+        let gemini = loadGeminiSummary(now: now)
+        return [claude, codex, gemini]
     }
 
     private func loadClaudeSummary(now: Date) -> SourceUsageSummary {

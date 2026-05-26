@@ -11,6 +11,7 @@ final class UsageViewModel {
     var isInstallingUpdate = false
 
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
+    @ObservationIgnored private var versionRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var timer: Timer?
 
     init() {
@@ -36,21 +37,38 @@ final class UsageViewModel {
 
     func refresh() {
         refreshTask?.cancel()
+        versionRefreshTask?.cancel()
         isRefreshing = true
         lastError = nil
 
         refreshTask = Task {
-            do {
-                let nextSnapshot = try await Task.detached(priority: .utility) {
-                    try UsageStore().loadSnapshot(now: Date())
+            let usageGeneratedAt = Date()
+            let summaries = await Task.detached(priority: .userInitiated) {
+                UsageStore().loadUsageSummaries(now: usageGeneratedAt)
+            }.value
+
+            guard !Task.isCancelled else { return }
+            snapshot = UsageSnapshot(
+                generatedAt: usageGeneratedAt,
+                summaries: summaries,
+                cliVersions: snapshot.cliVersions,
+                appUpdate: snapshot.appUpdate
+            )
+            isRefreshing = false
+
+            versionRefreshTask = Task {
+                let checkedAt = Date()
+                let versionSnapshot = await Task.detached(priority: .utility) {
+                    VersionStore().load(now: checkedAt)
                 }.value
 
                 guard !Task.isCancelled else { return }
-                snapshot = nextSnapshot
-                isRefreshing = false
-            } catch {
-                guard !Task.isCancelled else { return }
-                lastError = error.localizedDescription
+                snapshot = UsageSnapshot(
+                    generatedAt: snapshot.generatedAt,
+                    summaries: snapshot.summaries,
+                    cliVersions: versionSnapshot.cliVersions,
+                    appUpdate: versionSnapshot.appUpdate
+                )
                 isRefreshing = false
             }
         }

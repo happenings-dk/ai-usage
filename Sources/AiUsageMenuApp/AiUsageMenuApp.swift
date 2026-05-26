@@ -7,7 +7,7 @@ struct AiUsageMenuApp: App {
     var body: some Scene {
         MenuBarExtra {
             UsageDashboardView(model: model)
-                .frame(width: 390)
+                .frame(width: 390, height: 820)
         } label: {
             Label {
                 Text(model.menuBarTitle)
