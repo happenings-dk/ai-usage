@@ -9,28 +9,48 @@ final class VersionStore {
     private struct ToolDefinition {
         let source: UsageSource
         let executable: String
-        let packageName: String
+        let latestVersionProvider: LatestVersionProvider
         let updateCommand: String
+    }
+
+    private enum LatestVersionProvider {
+        case npm(packageName: String)
+        case grokUpdateCheck
+
+        var packageName: String {
+            switch self {
+            case .npm(let packageName):
+                packageName
+            case .grokUpdateCheck:
+                "grok"
+            }
+        }
     }
 
     private let tools = [
         ToolDefinition(
             source: .claude,
             executable: "claude",
-            packageName: "@anthropic-ai/claude-code",
+            latestVersionProvider: .npm(packageName: "@anthropic-ai/claude-code"),
             updateCommand: "npm install -g @anthropic-ai/claude-code"
         ),
         ToolDefinition(
             source: .codex,
             executable: "codex",
-            packageName: "@openai/codex",
+            latestVersionProvider: .npm(packageName: "@openai/codex"),
             updateCommand: "npm install -g @openai/codex"
         ),
         ToolDefinition(
             source: .gemini,
             executable: "gemini",
-            packageName: "@google/gemini-cli",
+            latestVersionProvider: .npm(packageName: "@google/gemini-cli"),
             updateCommand: "npm install -g @google/gemini-cli"
+        ),
+        ToolDefinition(
+            source: .grok,
+            executable: "grok",
+            latestVersionProvider: .grokUpdateCheck,
+            updateCommand: "grok update"
         )
     ]
 
@@ -43,7 +63,7 @@ final class VersionStore {
 
     private func loadToolVersion(_ tool: ToolDefinition, now: Date) -> CLIVersionStatus {
         let installedResult = CommandRunner.run(tool.executable, ["--version"], timeout: 2)
-        let latestResult = CommandRunner.run("npm", ["view", tool.packageName, "version"], timeout: 4)
+        let latestResult = loadLatestVersion(tool.latestVersionProvider)
 
         let installedVersion = VersionStore.extractVersion(from: installedResult.output)
         let latestVersion = VersionStore.extractVersion(from: latestResult.output)
@@ -60,11 +80,24 @@ final class VersionStore {
             source: tool.source,
             installedVersion: installedVersion,
             latestVersion: latestVersion,
-            packageName: tool.packageName,
+            packageName: tool.latestVersionProvider.packageName,
             updateCommand: tool.updateCommand,
             checkedAt: now,
             error: errors.isEmpty ? nil : errors.joined(separator: "; ")
         )
+    }
+
+    private func loadLatestVersion(_ provider: LatestVersionProvider) -> CommandRunner.Result {
+        switch provider {
+        case .npm(let packageName):
+            return CommandRunner.run("npm", ["view", packageName, "version"], timeout: 4)
+        case .grokUpdateCheck:
+            let result = CommandRunner.run("grok", ["update", "--check", "--json"], timeout: 6)
+            if let version = VersionStore.parseGrokLatestVersion(from: result.output) {
+                return CommandRunner.Result(output: version, error: result.error)
+            }
+            return result
+        }
     }
 
     private func loadAppUpdate(now: Date) -> AppUpdateStatus {
@@ -270,6 +303,14 @@ final class VersionStore {
             error: latestVersion == nil ? "Release missing tag" : nil
         )
     }
+
+    static func parseGrokLatestVersion(from output: String) -> String? {
+        guard let data = output.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        return object["latestVersion"] as? String
+    }
 }
 
 private final class FetchResultBox: @unchecked Sendable {
@@ -316,7 +357,7 @@ enum CommandRunner {
         process.arguments = [executable] + arguments
 
         var environment = ProcessInfo.processInfo.environment
-        let fallbackPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        let fallbackPath = "\(NSHomeDirectory())/.grok/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
         if let path = environment["PATH"], !path.isEmpty {
             environment["PATH"] = "\(path):\(fallbackPath)"
         } else {

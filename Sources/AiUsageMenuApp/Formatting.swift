@@ -118,4 +118,16 @@ enum TimeFormat {
         }
         return "\(days)d \(remainingHours)h"
     }
+
+    static func compactMilliseconds(_ milliseconds: Int) -> String {
+        if milliseconds < 1000 {
+            return "\(milliseconds)ms"
+        }
+
+        let seconds = Double(milliseconds) / 1000
+        if seconds < 10 {
+            return String(format: "%.1fs", seconds)
+        }
+        return "\(Int(seconds.rounded()))s"
+    }
 }

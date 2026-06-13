@@ -4,6 +4,7 @@ enum UsageSource: String, CaseIterable, Identifiable {
     case claude = "Claude"
     case codex = "Codex"
     case gemini = "Gemini"
+    case grok = "Grok"
 
     var id: String { rawValue }
 
@@ -15,6 +16,8 @@ enum UsageSource: String, CaseIterable, Identifiable {
             "terminal"
         case .gemini:
             "diamond"
+        case .grok:
+            "bolt.circle"
         }
     }
 }
@@ -84,6 +87,13 @@ struct ProjectUsage: Identifiable, Equatable {
     let eventCount: Int
 
     var id: String { name }
+}
+
+struct SourceUsageDetail: Identifiable, Equatable {
+    let title: String
+    let value: String
+
+    var id: String { title }
 }
 
 struct CLIVersionStatus: Identifiable, Equatable {
@@ -156,6 +166,7 @@ struct SourceUsageSummary: Equatable {
     let rateLimits: [RateLimitWindow]
     let rateLimitUpdatedAt: Date?
     let topProjects: [ProjectUsage]
+    let extraDetails: [SourceUsageDetail]
     let warning: String?
 
     static func empty(source: UsageSource) -> SourceUsageSummary {
@@ -175,6 +186,7 @@ struct SourceUsageSummary: Equatable {
             rateLimits: [],
             rateLimitUpdatedAt: nil,
             topProjects: [],
+            extraDetails: [],
             warning: nil
         )
     }
@@ -241,6 +253,9 @@ struct UsageSnapshot: Equatable {
 
             if let firstProject = summary.topProjects.first {
                 lines.append("Top project: \(firstProject.name) \(NumberFormat.compact(firstProject.usage.billableApproximation))")
+            }
+            for detail in summary.extraDetails {
+                lines.append("\(detail.title): \(detail.value)")
             }
 
             lines.append("")

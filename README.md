@@ -1,20 +1,20 @@
 # AI Usage Menu
 
-AI Usage Menu is a small macOS menu bar app for tracking local AI coding CLI usage across Claude Code, OpenAI Codex CLI, and Gemini CLI.
+AI Usage Menu is a small macOS menu bar app for tracking local AI coding CLI usage across Claude Code, OpenAI Codex CLI, Gemini CLI, and Grok CLI.
 
 It reads local transcript files, displays rolling token usage, shows reset windows when the CLI exposes them, checks installed CLI versions, and can update itself from GitHub Releases.
 
 ## Features
 
 - Menu bar usage summary with the tightest live rate-limit percentage.
-- Claude, Codex, and Gemini usage cards.
+- Claude, Codex, Gemini, and Grok usage cards.
 - Current 5 hour, today, and 7 day token totals.
 - Input, output, cached, billable, and total token breakdowns.
 - Claude Pro/Max 5 hour and weekly limits via Claude Code status-line JSON.
 - Codex 5 hour and weekly limits from Codex `token_count` events.
 - Exact reset timestamps, time remaining, percent left, and usage pace.
 - Top projects by 7 day billable usage.
-- Installed vs latest CLI versions for Claude, Codex, and Gemini.
+- Installed vs latest CLI versions for Claude, Codex, Gemini, and Grok.
 - GitHub Releases based over-the-air app updates.
 
 ## Data Sources
@@ -24,8 +24,9 @@ It reads local transcript files, displays rolling token usage, shows reset windo
 | Claude Code | `~/.claude/projects/**/*.jsonl` | Claude status-line `rate_limits` cache |
 | Codex CLI | `~/.codex/sessions/**/*.jsonl` | Codex `token_count.rate_limits` events |
 | Gemini CLI | `~/.gemini/tmp/**/chats/session-*.json` | Local activity estimate |
+| Grok CLI | `~/.grok/sessions/**/signals.json` | Local activity estimate |
 
-Claude transcripts do not expose separate reasoning tokens, so Claude shows `Reason N/A`. Codex shows `Reason`, and Gemini shows `Thoughts`.
+Claude transcripts do not expose separate reasoning tokens, so Claude shows `Reason N/A`. Codex shows `Reason`, and Gemini shows `Thoughts`. Grok currently exposes aggregate session context tokens in `signals.json`, so the app tracks those as input tokens, leaves output/reasoning as `N/A`, and adds Grok-specific context-window, turn, tool-call, error, and latency telemetry.
 
 ## Architecture
 
@@ -37,11 +38,13 @@ flowchart TD
     C --> E[Claude JSONL logs]
     C --> F[Codex JSONL logs]
     C --> G[Gemini session JSON]
-    C --> H[Claude rate-limit cache]
-    D --> I[Installed CLI --version]
-    D --> J[npm package versions]
-    D --> K[GitHub Releases latest]
-    B --> L[SwiftUI popover]
+    C --> H[Grok signals JSON]
+    C --> I[Claude rate-limit cache]
+    D --> J[Installed CLI --version]
+    D --> K[npm package versions]
+    D --> L[Grok update check]
+    D --> M[GitHub Releases latest]
+    B --> N[SwiftUI popover]
 ```
 
 ```mermaid

@@ -41,6 +41,22 @@ struct ParserTests {
     }
 
     @Test
+    func parsesGrokUpdateCheck() {
+        let json = """
+        {
+          "currentVersion": "0.2.51",
+          "latestVersion": "0.2.52",
+          "updateAvailable": true,
+          "installer": "internal",
+          "channel": "stable",
+          "error": null
+        }
+        """
+
+        #expect(VersionStore.parseGrokLatestVersion(from: json) == "0.2.52")
+    }
+
+    @Test
     func parsesClaudeRateLimitCache() throws {
         let directory = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent(UUID().uuidString)
@@ -118,5 +134,62 @@ struct ParserTests {
         #expect(events[0].usage.output == 25)
         #expect(events[0].usage.reasoningOutput == 3)
         #expect(events[0].usage.billableApproximation == 128)
+    }
+
+    @Test
+    func parsesGrokSignals() throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathComponent("session-id")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let summary = """
+        {
+          "info": {
+            "id": "session-id",
+            "cwd": "/Users/example/project"
+          },
+          "updated_at": "2026-06-12T18:11:12.565418Z",
+          "last_active_at": "2026-06-12T18:11:12.533300Z",
+          "current_model_id": "grok-build"
+        }
+        """
+        try summary.data(using: .utf8)!.write(to: directory.appendingPathComponent("summary.json"))
+
+        let signals = """
+        {
+          "turnCount": 3,
+          "contextTokensUsed": 153431,
+          "contextWindowUsage": 29,
+          "contextWindowTokens": 512000,
+          "toolCallCount": 89,
+          "toolFailureCount": 3,
+          "errorCount": 2,
+          "avgResponseTimeMs": 22865,
+          "avgTimeToFirstTokenMs": 2839,
+          "primaryModelId": "grok-build"
+        }
+        """
+        let signalsFile = directory.appendingPathComponent("signals.json")
+        try signals.data(using: .utf8)!.write(to: signalsFile)
+
+        let parsed = try #require(try GrokUsageParser.parse(signalsFile: signalsFile))
+        let event = parsed.event
+
+        #expect(event.id == "grok-session-id")
+        #expect(event.source == .grok)
+        #expect(event.usage.input == 153431)
+        #expect(event.usage.billableApproximation == 153431)
+        #expect(event.model == "grok-build")
+        #expect(event.project == "/Users/example/project")
+        #expect(event.timestamp == DateParsing.parse("2026-06-12T18:11:12.533300Z"))
+        #expect(parsed.contextWindowUsage == 29)
+        #expect(parsed.contextWindowTokens == 512000)
+        #expect(parsed.turnCount == 3)
+        #expect(parsed.toolCallCount == 89)
+        #expect(parsed.toolFailureCount == 3)
+        #expect(parsed.errorCount == 2)
+        #expect(parsed.avgResponseTimeMs == 22865)
+        #expect(parsed.avgTimeToFirstTokenMs == 2839)
     }
 }

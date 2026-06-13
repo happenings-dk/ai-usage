@@ -19,7 +19,8 @@ final class UsageStore {
         let claude = loadClaudeSummary(now: now)
         let codex = loadCodexSummary(now: now)
         let gemini = loadGeminiSummary(now: now)
-        return [claude, codex, gemini]
+        let grok = loadGrokSummary(now: now)
+        return [claude, codex, gemini, grok]
     }
 
     private func loadClaudeSummary(now: Date) -> SourceUsageSummary {
@@ -44,6 +45,7 @@ final class UsageStore {
                     rateLimits: rateLimitSnapshot.windows,
                     rateLimitUpdatedAt: rateLimitSnapshot.updatedAt,
                     topProjects: [],
+                    extraDetails: [],
                     warning: nil
                 )
             }
@@ -96,6 +98,7 @@ final class UsageStore {
                 rateLimits: [],
                 rateLimitUpdatedAt: nil,
                 topProjects: [],
+                extraDetails: [],
                 warning: error.localizedDescription
             )
         }
@@ -161,6 +164,7 @@ final class UsageStore {
                 rateLimits: [],
                 rateLimitUpdatedAt: nil,
                 topProjects: [],
+                extraDetails: [],
                 warning: error.localizedDescription
             )
         }
@@ -209,6 +213,60 @@ final class UsageStore {
                 rateLimits: [],
                 rateLimitUpdatedAt: nil,
                 topProjects: [],
+                extraDetails: [],
+                warning: error.localizedDescription
+            )
+        }
+    }
+
+    private func loadGrokSummary(now: Date) -> SourceUsageSummary {
+        let root = URL(fileURLWithPath: NSString(string: "~/.grok/sessions").expandingTildeInPath)
+        guard FileManager.default.fileExists(atPath: root.path) else {
+            return SourceUsageSummary.empty(source: .grok)
+        }
+
+        do {
+            var parsedSignals: [GrokParsedSignals] = []
+            var scannedFiles = 0
+            let cutoff = now.addingTimeInterval(-8 * 24 * 60 * 60)
+
+            for file in grokSignalFiles(under: root, modifiedAfter: cutoff) {
+                scannedFiles += 1
+                try autoreleasepool {
+                    if let parsed = try GrokUsageParser.parse(signalsFile: file) {
+                        parsedSignals.append(parsed)
+                    }
+                }
+            }
+
+            let latestSignals = parsedSignals.max { $0.event.timestamp < $1.event.timestamp }
+            return summarize(
+                events: parsedSignals.map(\.event),
+                source: .grok,
+                scannedFiles: scannedFiles,
+                now: now,
+                rateLimits: [],
+                rateLimitUpdatedAt: nil,
+                extraDetails: latestSignals.map(grokDetails) ?? []
+            )
+        } catch {
+            return SourceUsageSummary(
+                source: .grok,
+                scannedFiles: 0,
+                eventCount: 0,
+                currentWindowEventCount: 0,
+                currentWindowUsage: .zero,
+                todayUsage: .zero,
+                weekUsage: .zero,
+                lastEventAt: nil,
+                latestModel: nil,
+                latestProject: nil,
+                estimatedResetAt: nil,
+                estimatedWeeklyResetAt: nil,
+                rateLimits: [],
+                rateLimitUpdatedAt: nil,
+                topProjects: [],
+                extraDetails: [],
                 warning: error.localizedDescription
             )
         }
@@ -220,7 +278,8 @@ final class UsageStore {
         scannedFiles: Int,
         now: Date,
         rateLimits: [RateLimitWindow],
-        rateLimitUpdatedAt: Date?
+        rateLimitUpdatedAt: Date?,
+        extraDetails: [SourceUsageDetail] = []
     ) -> SourceUsageSummary {
         let fiveHoursAgo = now.addingTimeInterval(-5 * 60 * 60)
         let sevenDaysAgo = now.addingTimeInterval(-7 * 24 * 60 * 60)
@@ -263,8 +322,51 @@ final class UsageStore {
             rateLimits: rateLimits,
             rateLimitUpdatedAt: rateLimitUpdatedAt,
             topProjects: topProjects,
+            extraDetails: extraDetails,
             warning: nil
         )
+    }
+
+    private func grokDetails(from parsed: GrokParsedSignals) -> [SourceUsageDetail] {
+        var details: [SourceUsageDetail] = []
+
+        if let contextWindowUsage = parsed.contextWindowUsage {
+            let value: String
+            if let contextWindowTokens = parsed.contextWindowTokens {
+                value = "\(NumberFormat.percent(contextWindowUsage)) of \(NumberFormat.compact(contextWindowTokens))"
+            } else {
+                value = NumberFormat.percent(contextWindowUsage)
+            }
+            details.append(SourceUsageDetail(title: "Context window", value: value))
+        } else if let contextWindowTokens = parsed.contextWindowTokens {
+            details.append(SourceUsageDetail(title: "Context window", value: NumberFormat.compact(contextWindowTokens)))
+        }
+
+        if let turnCount = parsed.turnCount {
+            details.append(SourceUsageDetail(title: "Turns", value: NumberFormat.compact(turnCount)))
+        }
+
+        if let toolCallCount = parsed.toolCallCount {
+            var value = "\(NumberFormat.compact(toolCallCount)) calls"
+            if let toolFailureCount = parsed.toolFailureCount, toolFailureCount > 0 {
+                value += ", \(NumberFormat.compact(toolFailureCount)) failed"
+            }
+            details.append(SourceUsageDetail(title: "Tools", value: value))
+        }
+
+        if let errorCount = parsed.errorCount, errorCount > 0 {
+            details.append(SourceUsageDetail(title: "Errors", value: NumberFormat.compact(errorCount)))
+        }
+
+        if let avgResponseTimeMs = parsed.avgResponseTimeMs {
+            details.append(SourceUsageDetail(title: "Avg response", value: TimeFormat.compactMilliseconds(avgResponseTimeMs)))
+        }
+
+        if let avgTimeToFirstTokenMs = parsed.avgTimeToFirstTokenMs {
+            details.append(SourceUsageDetail(title: "First token", value: TimeFormat.compactMilliseconds(avgTimeToFirstTokenMs)))
+        }
+
+        return details
     }
 
     private func summarizeProjects(events: [UsageEvent]) -> [ProjectUsage] {
@@ -380,6 +482,43 @@ final class UsageStore {
             guard file.pathExtension == "json",
                   file.lastPathComponent.hasPrefix("session-"),
                   file.deletingLastPathComponent().lastPathComponent == "chats" else {
+                continue
+            }
+
+            do {
+                let values = try file.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey])
+                guard values.isRegularFile == true else {
+                    continue
+                }
+                guard let modified = values.contentModificationDate else {
+                    continue
+                }
+                if modified < cutoff {
+                    continue
+                }
+                files.append((file, modified))
+            } catch {
+                continue
+            }
+        }
+        return files
+            .sorted { $0.modified > $1.modified }
+            .prefix(maxFilesPerSource)
+            .map(\.url)
+    }
+
+    private func grokSignalFiles(under root: URL, modifiedAfter cutoff: Date) -> [URL] {
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        var files: [(url: URL, modified: Date)] = []
+        for case let file as URL in enumerator {
+            guard file.lastPathComponent == "signals.json" else {
                 continue
             }
 

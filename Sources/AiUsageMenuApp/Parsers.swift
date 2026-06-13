@@ -217,6 +217,78 @@ enum GeminiUsageParser {
     }
 }
 
+struct GrokParsedSignals: Equatable {
+    let event: UsageEvent
+    let contextWindowUsage: Double?
+    let contextWindowTokens: Int?
+    let turnCount: Int?
+    let toolCallCount: Int?
+    let toolFailureCount: Int?
+    let errorCount: Int?
+    let avgResponseTimeMs: Int?
+    let avgTimeToFirstTokenMs: Int?
+}
+
+enum GrokUsageParser {
+    static func parse(signalsFile: URL) throws -> GrokParsedSignals? {
+        let data = try Data(contentsOf: signalsFile, options: [.mappedIfSafe])
+        guard let signals = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+
+        let sessionDirectory = signalsFile.deletingLastPathComponent()
+        let summary = (try? parseSummary(file: sessionDirectory.appendingPathComponent("summary.json"))) ?? [:]
+
+        let usage = TokenUsage(
+            input: signals.int("contextTokensUsed"),
+            cachedInput: 0,
+            cacheCreationInput: 0,
+            output: 0,
+            reasoningOutput: 0
+        )
+
+        guard usage.total > 0 else {
+            return nil
+        }
+
+        let fileModifiedAt = (try? signalsFile.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        let timestamp = DateParsing.parse(summary["last_active_at"] as? String) ??
+            DateParsing.parse(summary["updated_at"] as? String) ??
+            fileModifiedAt ??
+            Date.distantPast
+
+        let id = summary.string("id", nestedUnder: "info") ?? sessionDirectory.lastPathComponent
+        let model = signals["primaryModelId"] as? String ?? summary["current_model_id"] as? String
+        let project = summary.string("cwd", nestedUnder: "info") ?? summary["git_root_dir"] as? String
+
+        let event = UsageEvent(
+            id: "grok-\(id)",
+            source: .grok,
+            timestamp: timestamp,
+            usage: usage,
+            model: model,
+            project: project
+        )
+
+        return GrokParsedSignals(
+            event: event,
+            contextWindowUsage: signals.optionalDouble("contextWindowUsage"),
+            contextWindowTokens: signals.optionalInt("contextWindowTokens"),
+            turnCount: signals.optionalInt("turnCount"),
+            toolCallCount: signals.optionalInt("toolCallCount"),
+            toolFailureCount: signals.optionalInt("toolFailureCount"),
+            errorCount: signals.optionalInt("errorCount"),
+            avgResponseTimeMs: signals.optionalInt("avgResponseTimeMs"),
+            avgTimeToFirstTokenMs: signals.optionalInt("avgTimeToFirstTokenMs")
+        )
+    }
+
+    private static func parseSummary(file: URL) throws -> [String: Any] {
+        let data = try Data(contentsOf: file, options: [.mappedIfSafe])
+        return (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+    }
+}
+
 enum DateParsing {
     static func parse(_ string: String?) -> Date? {
         guard let string else {
@@ -236,6 +308,19 @@ enum DateParsing {
 }
 
 private extension Dictionary where Key == String, Value == Any {
+    func optionalInt(_ key: String) -> Int? {
+        if let int = self[key] as? Int {
+            return int
+        }
+        if let double = self[key] as? Double {
+            return Int(double)
+        }
+        if let string = self[key] as? String {
+            return Int(string)
+        }
+        return nil
+    }
+
     func int(_ key: String) -> Int {
         if let int = self[key] as? Int {
             return int
@@ -251,6 +336,19 @@ private extension Dictionary where Key == String, Value == Any {
 
     func double(_ key: String) -> Double {
         double(key, fallbackKey: nil)
+    }
+
+    func optionalDouble(_ key: String) -> Double? {
+        if let double = self[key] as? Double {
+            return double
+        }
+        if let int = self[key] as? Int {
+            return Double(int)
+        }
+        if let string = self[key] as? String {
+            return Double(string)
+        }
+        return nil
     }
 
     func double(_ key: String, fallbackKey: String?) -> Double {
@@ -280,5 +378,12 @@ private extension Dictionary where Key == String, Value == Any {
             return Double(string) ?? 0
         }
         return 0
+    }
+
+    func string(_ key: String, nestedUnder parentKey: String) -> String? {
+        guard let parent = self[parentKey] as? [String: Any] else {
+            return nil
+        }
+        return parent[key] as? String
     }
 }

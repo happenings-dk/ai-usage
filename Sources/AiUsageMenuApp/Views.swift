@@ -17,6 +17,12 @@ struct UsageDashboardView: View {
                     } else {
                         CompactSourceUsageView(summary: gemini)
                     }
+                    let grok = model.snapshot.summary(for: .grok)
+                    if grok.hasActivity {
+                        SourceUsageView(summary: grok)
+                    } else {
+                        CompactSourceUsageView(summary: grok)
+                    }
 
                     VersionStatusView(
                         cliVersions: model.snapshot.cliVersions,
@@ -73,6 +79,9 @@ struct UsageDashboardView: View {
                     Button("Open Gemini Logs") {
                         model.openGeminiLogs()
                     }
+                    Button("Open Grok Logs") {
+                        model.openGrokLogs()
+                    }
                     if model.snapshot.appUpdate.releasePageURL != nil || model.snapshot.appUpdate.downloadURL != nil {
                         Divider()
                         Button("Open App Release") {
@@ -114,7 +123,7 @@ private struct HeaderView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("AI Usage")
                     .font(.title3.weight(.semibold))
-                Text("Claude, Codex, and Gemini CLI")
+                Text("Claude, Codex, Gemini, and Grok CLI")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -157,7 +166,11 @@ private struct SourceUsageView: View {
 
             TokenBreakdownView(source: summary.source, usage: summary.currentWindowUsage)
 
-            if summary.rateLimits.isEmpty {
+            if summary.source == .grok {
+                Text("Context telemetry only")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if summary.rateLimits.isEmpty {
                 ResetLine(
                     title: "Estimated 5h reset",
                     resetsAt: summary.estimatedResetAt,
@@ -452,7 +465,7 @@ private struct TokenBreakdownView: View {
 
     private var reasoningTitle: String {
         switch source {
-        case .claude:
+        case .claude, .grok:
             "Reason"
         case .codex:
             "Reason"
@@ -463,7 +476,7 @@ private struct TokenBreakdownView: View {
 
     private var reasoningValue: String {
         switch source {
-        case .claude:
+        case .claude, .grok:
             "N/A"
         case .codex, .gemini:
             NumberFormat.compact(usage.reasoningOutput)
@@ -510,6 +523,9 @@ private struct DetailRows: View {
             if !summary.rateLimits.isEmpty {
                 DetailRow(title: "Limit source", value: limitSource)
             }
+            ForEach(summary.extraDetails) { detail in
+                DetailRow(title: detail.title, value: detail.value)
+            }
         }
     }
 
@@ -519,7 +535,7 @@ private struct DetailRows: View {
             "Claude status line"
         case .codex:
             "Codex events"
-        case .gemini:
+        case .gemini, .grok:
             "Local estimate"
         }
     }
@@ -713,6 +729,10 @@ struct SettingsView: View {
                 }
                 LabeledContent("Gemini") {
                     Text("~/.gemini/tmp")
+                        .foregroundStyle(.secondary)
+                }
+                LabeledContent("Grok") {
+                    Text("~/.grok/sessions")
                         .foregroundStyle(.secondary)
                 }
             }

@@ -86,6 +86,10 @@ final class UsageViewModel {
         NSWorkspace.shared.open(URL(fileURLWithPath: NSString(string: "~/.gemini/tmp").expandingTildeInPath))
     }
 
+    func openGrokLogs() {
+        NSWorkspace.shared.open(URL(fileURLWithPath: NSString(string: "~/.grok/sessions").expandingTildeInPath))
+    }
+
     func openClaudeRateLimitCache() {
         NSWorkspace.shared.open(URL(fileURLWithPath: NSString(string: "~/.claude/ai-usage-rate-limits.json").expandingTildeInPath))
     }
