@@ -26,7 +26,10 @@ struct UsageDashboardView: View {
 
                     VersionStatusView(
                         cliVersions: model.snapshot.cliVersions,
-                        appUpdate: model.snapshot.appUpdate
+                        appUpdate: model.snapshot.appUpdate,
+                        isInstallingAppUpdate: model.isInstallingUpdate,
+                        copyUpdateCommand: model.copyUpdateCommand,
+                        installAppUpdate: model.installAppUpdate
                     )
                 }
                 .padding(.trailing, 4)
@@ -255,6 +258,9 @@ private struct CompactSourceUsageView: View {
 private struct VersionStatusView: View {
     let cliVersions: [CLIVersionStatus]
     let appUpdate: AppUpdateStatus
+    let isInstallingAppUpdate: Bool
+    let copyUpdateCommand: (CLIVersionStatus) -> Void
+    let installAppUpdate: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -270,10 +276,14 @@ private struct VersionStatusView: View {
             }
 
             ForEach(cliVersions) { status in
-                VersionRow(status: status)
+                VersionRow(status: status, copyUpdateCommand: copyUpdateCommand)
             }
 
-            AppUpdateRow(update: appUpdate)
+            AppUpdateRow(
+                update: appUpdate,
+                isInstallingUpdate: isInstallingAppUpdate,
+                installUpdate: installAppUpdate
+            )
         }
         .padding(10)
         .background(.background.secondary.opacity(0.72), in: .rect(cornerRadius: 8))
@@ -282,6 +292,7 @@ private struct VersionStatusView: View {
 
 private struct VersionRow: View {
     let status: CLIVersionStatus
+    let copyUpdateCommand: (CLIVersionStatus) -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -304,7 +315,17 @@ private struct VersionRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            VersionBadge(status: badgeStatus)
+            if status.isOutdated {
+                Button {
+                    copyUpdateCommand(status)
+                } label: {
+                    VersionBadge(status: .needsUpdate)
+                }
+                .buttonStyle(.plain)
+                .help("Copy \(status.updateCommand)")
+            } else {
+                VersionBadge(status: badgeStatus)
+            }
         }
         .help(helpText)
     }
@@ -332,6 +353,8 @@ private struct VersionRow: View {
 
 private struct AppUpdateRow: View {
     let update: AppUpdateStatus
+    let isInstallingUpdate: Bool
+    let installUpdate: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -363,7 +386,18 @@ private struct AppUpdateRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            VersionBadge(status: badgeStatus)
+            if update.isUpdateAvailable, update.downloadURL != nil {
+                Button {
+                    installUpdate()
+                } label: {
+                    VersionBadge(status: .needsUpdate)
+                }
+                .buttonStyle(.plain)
+                .disabled(isInstallingUpdate)
+                .help("Install app update")
+            } else {
+                VersionBadge(status: badgeStatus)
+            }
         }
         .help(helpText)
     }

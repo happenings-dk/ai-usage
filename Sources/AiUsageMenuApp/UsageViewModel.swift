@@ -139,6 +139,15 @@ final class UsageViewModel {
         NSPasteboard.general.setString(commands.joined(separator: "\n"), forType: .string)
     }
 
+    func copyUpdateCommand(for status: CLIVersionStatus) {
+        guard status.isOutdated else {
+            return
+        }
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(status.updateCommand, forType: .string)
+    }
+
     func quit() {
         NSApplication.shared.terminate(nil)
     }
