@@ -3,6 +3,9 @@ import Foundation
 enum NumberFormat {
     static func compact(_ value: Int) -> String {
         let number = Double(value)
+        if number >= 1_000_000_000 {
+            return String(format: "%.1fB", number / 1_000_000_000)
+        }
         if number >= 1_000_000 {
             return String(format: "%.1fM", number / 1_000_000)
         }

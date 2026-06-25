@@ -9,12 +9,15 @@ final class UsageViewModel {
     var isRefreshing = false
     var lastError: String?
     var isInstallingUpdate = false
+    var bridgeURLText = "Starting bridge..."
 
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var versionRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private let bridgeServer = BridgeServer.shared
 
     init() {
+        bridgeServer.start()
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -54,6 +57,7 @@ final class UsageViewModel {
                 cliVersions: snapshot.cliVersions,
                 appUpdate: snapshot.appUpdate
             )
+            publishBridgeSnapshot()
             isRefreshing = false
 
             versionRefreshTask = Task {
@@ -69,6 +73,7 @@ final class UsageViewModel {
                     cliVersions: versionSnapshot.cliVersions,
                     appUpdate: versionSnapshot.appUpdate
                 )
+                publishBridgeSnapshot()
                 isRefreshing = false
             }
         }
@@ -126,6 +131,16 @@ final class UsageViewModel {
         NSPasteboard.general.setString(snapshot.plainTextSummary(), forType: .string)
     }
 
+    func copyBridgeURL() {
+        updateBridgeURLText()
+        guard let url = bridgeServer.bridgeURL ?? bridgeServer.localhostURL else {
+            return
+        }
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+    }
+
     func copyUpdateCommands() {
         let commands = snapshot.cliVersions
             .filter(\.isOutdated)
@@ -150,5 +165,20 @@ final class UsageViewModel {
 
     func quit() {
         NSApplication.shared.terminate(nil)
+    }
+
+    private func publishBridgeSnapshot() {
+        bridgeServer.update(snapshot: snapshot)
+        updateBridgeURLText()
+    }
+
+    private func updateBridgeURLText() {
+        if let url = bridgeServer.bridgeURL {
+            bridgeURLText = url.absoluteString
+        } else if let url = bridgeServer.localhostURL {
+            bridgeURLText = url.absoluteString
+        } else {
+            bridgeURLText = "Bridge unavailable"
+        }
     }
 }

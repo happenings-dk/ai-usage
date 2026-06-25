@@ -1,0 +1,314 @@
+{
+  "appUpdate" : {
+    "assetName" : "AIUsageMenu-0.1.3.zip",
+    "checkedAt" : "2026-06-25T16:04:02Z",
+    "currentVersion" : "0.1.0",
+    "downloadURL" : "https:\/\/github.com\/happenings-dk\/ai-usage\/releases\/download\/v0.1.3\/AIUsageMenu-0.1.3.zip",
+    "githubRepository" : "happenings-dk\/ai-usage",
+    "latestVersion" : "0.1.3",
+    "releasePageURL" : "https:\/\/github.com\/happenings-dk\/ai-usage\/releases\/tag\/v0.1.3"
+  },
+  "cliVersions" : [
+    {
+      "checkedAt" : "2026-06-25T16:04:02Z",
+      "installedVersion" : "2.1.170",
+      "latestVersion" : "2.1.191",
+      "packageName" : "@anthropic-ai\/claude-code",
+      "source" : "Claude",
+      "updateCommand" : "npm install -g @anthropic-ai\/claude-code"
+    },
+    {
+      "checkedAt" : "2026-06-25T16:04:02Z",
+      "installedVersion" : "0.142.2",
+      "latestVersion" : "0.142.2",
+      "packageName" : "@openai\/codex",
+      "source" : "Codex",
+      "updateCommand" : "npm install -g @openai\/codex"
+    },
+    {
+      "checkedAt" : "2026-06-25T16:04:02Z",
+      "installedVersion" : "0.43.0",
+      "latestVersion" : "0.47.0",
+      "packageName" : "@google\/gemini-cli",
+      "source" : "Gemini",
+      "updateCommand" : "npm install -g @google\/gemini-cli"
+    },
+    {
+      "checkedAt" : "2026-06-25T16:04:02Z",
+      "installedVersion" : "0.2.59",
+      "latestVersion" : "0.2.64",
+      "packageName" : "grok",
+      "source" : "Grok",
+      "updateCommand" : "grok update"
+    }
+  ],
+  "generatedAt" : "2026-06-25T16:04:02Z",
+  "summaries" : [
+    {
+      "currentWindowEventCount" : 730,
+      "currentWindowUsage" : {
+        "cacheCreationInput" : 1966520,
+        "cachedInput" : 151809649,
+        "input" : 285068,
+        "output" : 303159,
+        "reasoningOutput" : 0
+      },
+      "estimatedResetAt" : "2026-06-25T17:06:40Z",
+      "estimatedWeeklyResetAt" : "2026-07-01T20:26:43Z",
+      "eventCount" : 2499,
+      "extraDetails" : [
+
+      ],
+      "lastEventAt" : "2026-06-25T16:03:51Z",
+      "latestModel" : "claude-opus-4-8",
+      "latestProject" : "\/Users\/rasmusjensing\/project-money\/apple\/Apps\/Consumer\/iOS",
+      "rateLimitUpdatedAt" : "2026-06-25T16:03:55Z",
+      "rateLimits" : [
+        {
+          "name" : "5h",
+          "resetsAt" : "2026-06-25T20:00:00Z",
+          "usedPercent" : 9,
+          "windowMinutes" : 300
+        },
+        {
+          "name" : "Weekly",
+          "resetsAt" : "2026-06-29T03:00:00Z",
+          "usedPercent" : 86,
+          "windowMinutes" : 10080
+        }
+      ],
+      "scannedFiles" : 120,
+      "source" : "Claude",
+      "todayUsage" : {
+        "cacheCreationInput" : 3481603,
+        "cachedInput" : 188023629,
+        "input" : 529893,
+        "output" : 369944,
+        "reasoningOutput" : 0
+      },
+      "topProjects" : [
+        {
+          "eventCount" : 1586,
+          "name" : "hrj_internal",
+          "usage" : {
+            "cacheCreationInput" : 6029534,
+            "cachedInput" : 105969592,
+            "input" : 1675709,
+            "output" : 212249,
+            "reasoningOutput" : 0
+          }
+        },
+        {
+          "eventCount" : 295,
+          "name" : "project-money",
+          "usage" : {
+            "cacheCreationInput" : 1147164,
+            "cachedInput" : 47090286,
+            "input" : 13593,
+            "output" : 123637,
+            "reasoningOutput" : 0
+          }
+        },
+        {
+          "eventCount" : 264,
+          "name" : "backend",
+          "usage" : {
+            "cacheCreationInput" : 716875,
+            "cachedInput" : 40078782,
+            "input" : 138395,
+            "output" : 46858,
+            "reasoningOutput" : 0
+          }
+        }
+      ],
+      "weekUsage" : {
+        "cacheCreationInput" : 8748736,
+        "cachedInput" : 269215303,
+        "input" : 1968190,
+        "output" : 529110,
+        "reasoningOutput" : 0
+      }
+    },
+    {
+      "currentWindowEventCount" : 4,
+      "currentWindowUsage" : {
+        "cacheCreationInput" : 0,
+        "cachedInput" : 42081920,
+        "input" : 45143640,
+        "output" : 132143,
+        "reasoningOutput" : 33395
+      },
+      "estimatedResetAt" : "2026-06-25T19:21:52Z",
+      "estimatedWeeklyResetAt" : "2026-06-27T13:32:35Z",
+      "eventCount" : 13,
+      "extraDetails" : [
+
+      ],
+      "lastEventAt" : "2026-06-25T16:03:57Z",
+      "rateLimitUpdatedAt" : "2026-06-25T16:03:57Z",
+      "rateLimits" : [
+        {
+          "name" : "5h",
+          "resetsAt" : "2026-06-25T20:11:00Z",
+          "usedPercent" : 5,
+          "windowMinutes" : 300
+        },
+        {
+          "name" : "Weekly",
+          "resetsAt" : "2026-06-26T22:34:53Z",
+          "usedPercent" : 36,
+          "windowMinutes" : 10080
+        }
+      ],
+      "scannedFiles" : 13,
+      "source" : "Codex",
+      "todayUsage" : {
+        "cacheCreationInput" : 0,
+        "cachedInput" : 44712576,
+        "input" : 48208147,
+        "output" : 140528,
+        "reasoningOutput" : 36193
+      },
+      "topProjects" : [
+        {
+          "eventCount" : 13,
+          "name" : "Unknown",
+          "usage" : {
+            "cacheCreationInput" : 0,
+            "cachedInput" : 1186929920,
+            "input" : 1229981772,
+            "output" : 2897636,
+            "reasoningOutput" : 457668
+          }
+        }
+      ],
+      "weekUsage" : {
+        "cacheCreationInput" : 0,
+        "cachedInput" : 1186929920,
+        "input" : 1229981772,
+        "output" : 2897636,
+        "reasoningOutput" : 457668
+      }
+    },
+    {
+      "currentWindowEventCount" : 0,
+      "currentWindowUsage" : {
+        "cacheCreationInput" : 0,
+        "cachedInput" : 0,
+        "input" : 0,
+        "output" : 0,
+        "reasoningOutput" : 0
+      },
+      "eventCount" : 0,
+      "extraDetails" : [
+
+      ],
+      "rateLimits" : [
+
+      ],
+      "scannedFiles" : 0,
+      "source" : "Gemini",
+      "todayUsage" : {
+        "cacheCreationInput" : 0,
+        "cachedInput" : 0,
+        "input" : 0,
+        "output" : 0,
+        "reasoningOutput" : 0
+      },
+      "topProjects" : [
+
+      ],
+      "weekUsage" : {
+        "cacheCreationInput" : 0,
+        "cachedInput" : 0,
+        "input" : 0,
+        "output" : 0,
+        "reasoningOutput" : 0
+      }
+    },
+    {
+      "currentWindowEventCount" : 0,
+      "currentWindowUsage" : {
+        "cacheCreationInput" : 0,
+        "cachedInput" : 0,
+        "input" : 0,
+        "output" : 0,
+        "reasoningOutput" : 0
+      },
+      "estimatedWeeklyResetAt" : "2026-06-27T22:18:18Z",
+      "eventCount" : 7,
+      "extraDetails" : [
+        {
+          "title" : "Context window",
+          "value" : "50% of 200K"
+        },
+        {
+          "title" : "Turns",
+          "value" : "19"
+        },
+        {
+          "title" : "Tools",
+          "value" : "421 calls, 2 failed"
+        },
+        {
+          "title" : "Errors",
+          "value" : "2"
+        },
+        {
+          "title" : "Avg response",
+          "value" : "4.7s"
+        },
+        {
+          "title" : "First token",
+          "value" : "1.1s"
+        }
+      ],
+      "lastEventAt" : "2026-06-22T21:52:13Z",
+      "latestModel" : "grok-composer-2.5-fast",
+      "latestProject" : "\/Users\/rasmusjensing\/research-unitex",
+      "rateLimits" : [
+
+      ],
+      "scannedFiles" : 7,
+      "source" : "Grok",
+      "todayUsage" : {
+        "cacheCreationInput" : 0,
+        "cachedInput" : 0,
+        "input" : 0,
+        "output" : 0,
+        "reasoningOutput" : 0
+      },
+      "topProjects" : [
+        {
+          "eventCount" : 6,
+          "name" : "research-unitex",
+          "usage" : {
+            "cacheCreationInput" : 0,
+            "cachedInput" : 0,
+            "input" : 368964,
+            "output" : 0,
+            "reasoningOutput" : 0
+          }
+        },
+        {
+          "eventCount" : 1,
+          "name" : "project-money",
+          "usage" : {
+            "cacheCreationInput" : 0,
+            "cachedInput" : 0,
+            "input" : 144652,
+            "output" : 0,
+            "reasoningOutput" : 0
+          }
+        }
+      ],
+      "weekUsage" : {
+        "cacheCreationInput" : 0,
+        "cachedInput" : 0,
+        "input" : 513616,
+        "output" : 0,
+        "reasoningOutput" : 0
+      }
+    }
+  ]
+}

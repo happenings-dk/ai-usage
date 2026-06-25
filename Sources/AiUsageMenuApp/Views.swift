@@ -58,6 +58,9 @@ struct UsageDashboardView: View {
                     Button("Copy Summary") {
                         model.copySummary()
                     }
+                    Button("Copy iPhone Bridge URL") {
+                        model.copyBridgeURL()
+                    }
                     Button("Copy CLI Update Commands") {
                         model.copyUpdateCommands()
                     }
@@ -778,6 +781,18 @@ struct SettingsView: View {
                 }
                 Button("Refresh Now") {
                     model.refresh()
+                }
+            }
+
+            Section("iPhone Bridge") {
+                LabeledContent("Snapshot URL") {
+                    Text(model.bridgeURLText)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Button("Copy Bridge URL") {
+                    model.copyBridgeURL()
                 }
             }
 
