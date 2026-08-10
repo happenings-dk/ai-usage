@@ -1,9 +1,13 @@
 import Foundation
+import Network
 
+/// Serves snapshots over authenticated HTTP and broadcasts updates over WebSocket.
+///
+/// All mutable state is confined to `queue`; the unchecked conformance bridges
+/// Network.framework's dispatch callbacks into Swift 6 strict concurrency.
 final class BridgeServer: @unchecked Sendable {
     static let shared = BridgeServer()
 
-    private let lock = NSLock()
     private let queue = DispatchQueue(label: "ai-usage.bridge-server")
     private let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
@@ -12,106 +16,298 @@ final class BridgeServer: @unchecked Sendable {
         return encoder
     }()
 
-    private var socketDescriptor: Int32 = -1
     private var currentSnapshotData: Data?
-    private(set) var port: UInt16 = 0
+    private var currentEnvelopeData: Data?
+    private var httpListener: NWListener?
+    private var webSocketListener: NWListener?
+    private var webSocketClients: [UUID: NWConnection] = [:]
+    private var httpPort: UInt16 = 0
+    private var webSocketPort: UInt16 = 0
+    private var sequence: UInt64 = 0
+
+    let deviceID: String
     let token: String
 
     private init() {
-        token = Self.loadOrCreateToken()
+        deviceID = Self.loadOrCreateValue(named: "bridge-device-id", generate: { UUID().uuidString.lowercased() })
+        token = Self.loadOrCreateValue(named: "bridge-token", generate: {
+            UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        })
     }
 
     var isRunning: Bool {
-        lock.withLock { socketDescriptor >= 0 }
+        queue.sync { httpListener != nil && webSocketListener != nil }
     }
 
     var bridgeURL: URL? {
-        guard port > 0, let host = Self.preferredHostAddress() else {
-            return nil
-        }
-        return URL(string: "http://\(host):\(port)/snapshot.json?token=\(token)")
+        endpointURL(scheme: "http", port: queue.sync { httpPort }, path: "/snapshot.json")
     }
 
     var localhostURL: URL? {
-        guard port > 0 else {
+        endpointURL(scheme: "http", host: "127.0.0.1", port: queue.sync { httpPort }, path: "/snapshot.json")
+    }
+
+    var webSocketURL: URL? {
+        endpointURL(scheme: "ws", port: queue.sync { webSocketPort }, path: "/live")
+    }
+
+    var pairingPayload: BridgePairingPayload? {
+        guard let localSnapshotURL = bridgeURL, let webSocketURL else {
             return nil
         }
-        return URL(string: "http://127.0.0.1:\(port)/snapshot.json?token=\(token)")
+        let relay = RelayConfiguration.load()
+        return BridgePairingPayload(
+            deviceID: deviceID,
+            deviceName: Host.current().localizedName ?? "Mac",
+            snapshotURL: relay?.snapshotURL ?? localSnapshotURL,
+            webSocketURL: webSocketURL,
+            token: token,
+            relayURL: relay?.subscriberURL,
+            relaySnapshotURL: relay?.snapshotURL,
+            relayChannel: relay?.channel,
+            relayToken: relay?.token
+        )
     }
 
+    /// Starts the HTTP and WebSocket listeners if needed.
     func start() {
-        lock.lock()
-        if socketDescriptor >= 0 {
-            lock.unlock()
+        queue.async { [weak self] in
+            self?.startListeners()
+        }
+    }
+
+    /// Replaces the current snapshot and broadcasts it to every live client.
+    func update(snapshot: UsageSnapshot) {
+        queue.async { [weak self] in
+            self?.publish(snapshot: snapshot)
+        }
+    }
+
+    private func startListeners() {
+        guard httpListener == nil, webSocketListener == nil else {
             return
         }
-        lock.unlock()
 
         do {
-            let selectedPort = try Self.availableBridgePort()
-            let descriptor = try Self.makeListeningSocket(port: selectedPort)
+            let httpListener = try NWListener(using: .tcp, on: .any)
+            httpListener.stateUpdateHandler = { [weak self] state in
+                self?.handleHTTPListenerState(state)
+            }
+            httpListener.newConnectionHandler = { [weak self] connection in
+                self?.acceptHTTP(connection)
+            }
+            self.httpListener = httpListener
+            httpListener.start(queue: queue)
 
-            lock.withLock {
-                self.socketDescriptor = descriptor
-                self.port = selectedPort
+            let webSocketOptions = NWProtocolWebSocket.Options(.version13)
+            webSocketOptions.autoReplyPing = true
+            webSocketOptions.maximumMessageSize = 2 * 1024 * 1024
+            let token = self.token
+            webSocketOptions.setClientRequestHandler(queue) { subprotocols, headers in
+                let isAuthorized = Self.isAuthorized(headers: headers, token: token)
+                let selectedProtocol = subprotocols.contains(BridgeProtocol.webSocketSubprotocol)
+                    ? BridgeProtocol.webSocketSubprotocol
+                    : nil
+                return NWProtocolWebSocket.Response(
+                    status: isAuthorized ? .accept : .reject,
+                    subprotocol: selectedProtocol
+                )
             }
-            Self.log("starting bridge on \(selectedPort)")
-            queue.async { [weak self] in
-                self?.acceptLoop(socketDescriptor: descriptor)
+
+            let parameters = NWParameters(tls: nil, tcp: NWProtocolTCP.Options())
+            parameters.defaultProtocolStack.applicationProtocols.insert(webSocketOptions, at: 0)
+            let webSocketListener = try NWListener(using: parameters, on: .any)
+            let txtRecord = NWTXTRecord([
+                "deviceID": deviceID,
+                "version": String(BridgeProtocol.version)
+            ])
+            webSocketListener.service = NWListener.Service(
+                name: Host.current().localizedName,
+                type: BridgeProtocol.bonjourServiceType,
+                txtRecord: txtRecord
+            )
+            webSocketListener.stateUpdateHandler = { [weak self] state in
+                self?.handleWebSocketListenerState(state)
             }
-            Self.log("bridge ready on \(selectedPort)")
+            webSocketListener.newConnectionHandler = { [weak self] connection in
+                self?.acceptWebSocket(connection)
+            }
+            self.webSocketListener = webSocketListener
+            webSocketListener.start(queue: queue)
         } catch {
             Self.log("bridge start error: \(error)")
-            // Bridge is best-effort; the UI exposes absence by omitting a URL.
+            stopListeners()
         }
     }
 
-    func update(snapshot: UsageSnapshot) {
-        if let data = try? encoder.encode(snapshot) {
-            lock.withLock {
-                currentSnapshotData = data
+    private func handleHTTPListenerState(_ state: NWListener.State) {
+        switch state {
+        case .ready:
+            httpPort = httpListener?.port?.rawValue ?? 0
+            Self.log("HTTP bridge ready on \(httpPort)")
+        case .failed(let error):
+            Self.log("HTTP bridge failed: \(error)")
+            stopListeners()
+        case .cancelled:
+            httpPort = 0
+        default:
+            break
+        }
+    }
+
+    private func handleWebSocketListenerState(_ state: NWListener.State) {
+        switch state {
+        case .ready:
+            webSocketPort = webSocketListener?.port?.rawValue ?? 0
+            Self.log("WebSocket bridge ready on \(webSocketPort)")
+        case .failed(let error):
+            Self.log("WebSocket bridge failed: \(error)")
+            stopListeners()
+        case .cancelled:
+            webSocketPort = 0
+        default:
+            break
+        }
+    }
+
+    private func acceptHTTP(_ connection: NWConnection) {
+        let connectionID = UUID()
+        connection.stateUpdateHandler = { [weak connection] state in
+            if case .failed = state {
+                connection?.cancel()
             }
         }
+        connection.start(queue: queue)
+        receiveHTTPRequest(connection, connectionID: connectionID, buffered: Data())
     }
 
-    private func acceptLoop(socketDescriptor: Int32) {
-        while true {
-            var clientAddress = sockaddr()
-            var clientAddressLength = socklen_t(MemoryLayout<sockaddr>.size)
-            let client = accept(socketDescriptor, &clientAddress, &clientAddressLength)
-            if client < 0 {
-                Self.log("bridge accept error: \(errno)")
-                continue
-            }
-
-            handle(client: client)
-        }
-    }
-
-    private func handle(client: Int32) {
-        defer { close(client) }
-
-        var buffer = [UInt8](repeating: 0, count: 16 * 1024)
-        let count = read(client, &buffer, buffer.count)
-        guard count > 0 else {
-            return
-        }
-
-        let response = response(for: Data(buffer.prefix(count)))
-        response.withUnsafeBytes { bytes in
-            guard let baseAddress = bytes.baseAddress else {
+    private func receiveHTTPRequest(_ connection: NWConnection, connectionID: UUID, buffered: Data) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 16 * 1024) { [weak self] data, _, isComplete, error in
+            guard let self else {
+                connection.cancel()
                 return
             }
-            _ = write(client, baseAddress, response.count)
+            var requestData = buffered
+            if let data {
+                requestData.append(data)
+            }
+            if requestData.range(of: Data("\r\n\r\n".utf8)) != nil || isComplete || error != nil {
+                let response = self.response(for: requestData)
+                connection.send(content: response, completion: .contentProcessed { _ in
+                    connection.cancel()
+                })
+            } else {
+                self.receiveHTTPRequest(connection, connectionID: connectionID, buffered: requestData)
+            }
         }
+    }
+
+    private func acceptWebSocket(_ connection: NWConnection) {
+        let id = UUID()
+        connection.stateUpdateHandler = { [weak self] state in
+            self?.handleWebSocketState(state, id: id, connection: connection)
+        }
+        connection.start(queue: queue)
+    }
+
+    private func handleWebSocketState(_ state: NWConnection.State, id: UUID, connection: NWConnection) {
+        switch state {
+        case .ready:
+            webSocketClients[id] = connection
+            if let currentEnvelopeData {
+                send(currentEnvelopeData, to: connection, id: id)
+            }
+            receiveWebSocketMessage(from: connection, id: id)
+        case .failed(let error):
+            Self.log("WebSocket client failed: \(error)")
+            removeWebSocketClient(id)
+        case .cancelled:
+            removeWebSocketClient(id)
+        default:
+            break
+        }
+    }
+
+    private func receiveWebSocketMessage(from connection: NWConnection, id: UUID) {
+        connection.receiveMessage { [weak self] _, context, _, error in
+            guard let self else {
+                connection.cancel()
+                return
+            }
+            if let error {
+                Self.log("WebSocket receive failed: \(error)")
+                self.removeWebSocketClient(id)
+                return
+            }
+            if let metadata = context?.protocolMetadata(definition: NWProtocolWebSocket.definition)
+                as? NWProtocolWebSocket.Metadata,
+               metadata.opcode == .close {
+                self.removeWebSocketClient(id)
+                return
+            }
+            self.receiveWebSocketMessage(from: connection, id: id)
+        }
+    }
+
+    private func publish(snapshot: UsageSnapshot) {
+        guard let snapshotData = try? encoder.encode(snapshot) else {
+            return
+        }
+        sequence &+= 1
+        guard let envelopeData = try? encoder.encode(SnapshotEnvelope(sequence: sequence, snapshot: snapshot)) else {
+            return
+        }
+        currentSnapshotData = snapshotData
+        currentEnvelopeData = envelopeData
+        for (id, connection) in webSocketClients {
+            send(envelopeData, to: connection, id: id)
+        }
+        if let relay = RelayConfiguration.load() {
+            Task {
+                await RelayClient.shared.publish(envelopeData, using: relay)
+            }
+        }
+    }
+
+    private func send(_ data: Data, to connection: NWConnection, id: UUID) {
+        let metadata = NWProtocolWebSocket.Metadata(opcode: .binary)
+        let context = NWConnection.ContentContext(
+            identifier: "snapshot-\(sequence)",
+            metadata: [metadata]
+        )
+        connection.send(content: data, contentContext: context, isComplete: true, completion: .contentProcessed { [weak self] error in
+            guard error != nil else {
+                return
+            }
+            self?.removeWebSocketClient(id)
+        })
+    }
+
+    private func removeWebSocketClient(_ id: UUID) {
+        webSocketClients.removeValue(forKey: id)?.cancel()
+    }
+
+    private func stopListeners() {
+        httpListener?.cancel()
+        webSocketListener?.cancel()
+        httpListener = nil
+        webSocketListener = nil
+        httpPort = 0
+        webSocketPort = 0
+        for connection in webSocketClients.values {
+            connection.cancel()
+        }
+        webSocketClients.removeAll()
     }
 
     private func response(for requestData: Data) -> Data {
-        guard let request = String(data: requestData, encoding: .utf8),
-              let firstLine = request.split(separator: "\r\n").first else {
+        guard let request = String(data: requestData, encoding: .utf8) else {
             return httpResponse(status: "400 Bad Request", body: #"{"error":"bad_request"}"#)
         }
-
+        let lines = request.components(separatedBy: "\r\n")
+        guard let firstLine = lines.first else {
+            return httpResponse(status: "400 Bad Request", body: #"{"error":"bad_request"}"#)
+        }
         let parts = firstLine.split(separator: " ")
         guard parts.count >= 2 else {
             return httpResponse(status: "400 Bad Request", body: #"{"error":"bad_request"}"#)
@@ -121,11 +317,14 @@ final class BridgeServer: @unchecked Sendable {
         guard target.hasPrefix("/snapshot.json") else {
             return httpResponse(status: "404 Not Found", body: #"{"error":"not_found"}"#)
         }
-        guard target.contains("token=\(token)") else {
+        let headers = lines.dropFirst().compactMap(Self.parseHeader)
+        let queryToken = URLComponents(string: "http://bridge\(target)")?.queryItems?
+            .first(where: { $0.name == "token" })?.value
+        guard Self.isAuthorized(headers: headers, token: token) || queryToken == token else {
             return httpResponse(status: "401 Unauthorized", body: #"{"error":"unauthorized"}"#)
         }
 
-        let body = lock.withLock { currentSnapshotData } ?? (try? encoder.encode(UsageSnapshot.empty)) ?? Data("{}".utf8)
+        let body = currentSnapshotData ?? (try? encoder.encode(UsageSnapshot.empty)) ?? Data("{}".utf8)
         return httpResponse(status: "200 OK", contentType: "application/json", body: body)
     }
 
@@ -139,27 +338,60 @@ final class BridgeServer: @unchecked Sendable {
         header += "Content-Length: \(body.count)\r\n"
         header += "Cache-Control: no-store\r\n"
         header += "Connection: close\r\n"
-        header += "Access-Control-Allow-Origin: *\r\n"
         header += "\r\n"
-
         var response = Data(header.utf8)
         response.append(body)
         return response
     }
 
-    private static func loadOrCreateToken() -> String {
+    private func endpointURL(scheme: String, port: UInt16, path: String) -> URL? {
+        guard let host = Self.preferredHostAddress() else {
+            return nil
+        }
+        return endpointURL(scheme: scheme, host: host, port: port, path: path)
+    }
+
+    private func endpointURL(scheme: String, host: String, port: UInt16, path: String) -> URL? {
+        guard port > 0 else {
+            return nil
+        }
+        var components = URLComponents()
+        components.scheme = scheme
+        components.host = host
+        components.port = Int(port)
+        components.path = path
+        return components.url
+    }
+
+    private static func parseHeader(_ line: String) -> (name: String, value: String)? {
+        guard let separator = line.firstIndex(of: ":") else {
+            return nil
+        }
+        let name = String(line[..<separator]).trimmingCharacters(in: .whitespaces)
+        let value = String(line[line.index(after: separator)...]).trimmingCharacters(in: .whitespaces)
+        return (name, value)
+    }
+
+    private static func isAuthorized(headers: [(name: String, value: String)], token: String) -> Bool {
+        headers.contains { header in
+            header.name.caseInsensitiveCompare(BridgeProtocol.authorizationHeader) == .orderedSame &&
+                header.value == "Bearer \(token)"
+        }
+    }
+
+    private static func loadOrCreateValue(named name: String, generate: () -> String) -> String {
         let directory = URL(fileURLWithPath: NSString(string: "~/.ai-usage").expandingTildeInPath)
-        let file = directory.appendingPathComponent("bridge-token")
+        let file = directory.appendingPathComponent(name)
         if let existing = try? String(contentsOf: file, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines),
            !existing.isEmpty {
             return existing
         }
 
-        let token = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let value = generate()
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try? token.write(to: file, atomically: true, encoding: .utf8)
-        return token
+        try? value.write(to: file, atomically: true, encoding: .utf8)
+        return value
     }
 
     private static func log(_ message: String) {
@@ -167,82 +399,16 @@ final class BridgeServer: @unchecked Sendable {
         let file = directory.appendingPathComponent("bridge.log")
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let line = "\(ISO8601DateFormatter().string(from: Date())) \(message)\n"
-        if let data = line.data(using: .utf8) {
-            if FileManager.default.fileExists(atPath: file.path),
-               let handle = try? FileHandle(forWritingTo: file) {
-                _ = try? handle.seekToEnd()
-                try? handle.write(contentsOf: data)
-                try? handle.close()
-            } else {
-                try? data.write(to: file)
-            }
+        guard let data = line.data(using: .utf8) else {
+            return
         }
-    }
-
-    private static func availableBridgePort() throws -> UInt16 {
-        for port in UInt16(47_392)...UInt16(47_402) {
-            if canBind(port: port) {
-                return port
-            }
-        }
-        throw CocoaError(.fileWriteUnknown)
-    }
-
-    private static func makeListeningSocket(port: UInt16) throws -> Int32 {
-        let socketDescriptor = socket(AF_INET, SOCK_STREAM, 0)
-        guard socketDescriptor >= 0 else {
-            throw POSIXError(.init(rawValue: errno) ?? .EIO)
-        }
-
-        var yes: Int32 = 1
-        setsockopt(socketDescriptor, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
-
-        var address = sockaddr_in()
-        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = port.bigEndian
-        address.sin_addr = in_addr(s_addr: INADDR_ANY.bigEndian)
-
-        let didBind = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
-                bind(socketDescriptor, sockaddrPointer, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0
-            }
-        }
-        guard didBind else {
-            let error = POSIXError(.init(rawValue: errno) ?? .EIO)
-            close(socketDescriptor)
-            throw error
-        }
-
-        guard listen(socketDescriptor, SOMAXCONN) == 0 else {
-            let error = POSIXError(.init(rawValue: errno) ?? .EIO)
-            close(socketDescriptor)
-            throw error
-        }
-
-        return socketDescriptor
-    }
-
-    private static func canBind(port: UInt16) -> Bool {
-        let socketDescriptor = socket(AF_INET, SOCK_STREAM, 0)
-        guard socketDescriptor >= 0 else {
-            return false
-        }
-        defer { close(socketDescriptor) }
-
-        var yes: Int32 = 1
-        setsockopt(socketDescriptor, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
-
-        var address = sockaddr_in()
-        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = port.bigEndian
-        address.sin_addr = in_addr(s_addr: INADDR_ANY.bigEndian)
-
-        return withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
-                bind(socketDescriptor, sockaddrPointer, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0
-            }
+        if FileManager.default.fileExists(atPath: file.path),
+           let handle = try? FileHandle(forWritingTo: file) {
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+            try? handle.close()
+        } else {
+            try? data.write(to: file)
         }
     }
 
@@ -264,7 +430,6 @@ final class BridgeServer: @unchecked Sendable {
         var current: UnsafeMutablePointer<ifaddrs>? = first
         while let item = current {
             defer { current = item.pointee.ifa_next }
-
             let flags = Int32(item.pointee.ifa_flags)
             guard flags & IFF_UP != 0,
                   flags & IFF_LOOPBACK == 0,
@@ -278,22 +443,13 @@ final class BridgeServer: @unchecked Sendable {
             guard getnameinfo(address, length, &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 else {
                 continue
             }
-
             let interface = String(cString: item.pointee.ifa_name)
             let endIndex = host.firstIndex(of: 0) ?? host.endIndex
             let addressString = String(decoding: host[..<endIndex].map(UInt8.init(bitPattern:)), as: UTF8.self)
             if !addressString.hasPrefix("169.254.") {
-                result.append((interface: interface, address: addressString))
+                result.append((interface, addressString))
             }
         }
         return result
-    }
-}
-
-private extension NSLock {
-    func withLock<T>(_ body: () -> T) -> T {
-        lock()
-        defer { unlock() }
-        return body()
     }
 }

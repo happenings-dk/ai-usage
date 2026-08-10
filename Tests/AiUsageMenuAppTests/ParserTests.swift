@@ -193,3 +193,52 @@ struct ParserTests {
         #expect(parsed.avgTimeToFirstTokenMs == 2839)
     }
 }
+
+struct BridgeTests {
+    @Test
+    func pairingURLRoundTripsLocalAndRelayTransports() throws {
+        let payload = BridgePairingPayload(
+            deviceID: "mac-1",
+            deviceName: "Studio",
+            snapshotURL: URL(string: "https://relay.example/v1/channels/home/snapshot")!,
+            webSocketURL: URL(string: "ws://100.64.0.1:8123/live")!,
+            token: "local-token",
+            relayURL: URL(string: "wss://relay.example/v1/channels/home?role=subscriber")!,
+            relaySnapshotURL: URL(string: "https://relay.example/v1/channels/home/snapshot")!,
+            relayChannel: "home",
+            relayToken: "relay-token"
+        )
+
+        let encodedURL = try #require(payload.encodedPairingURL())
+        let decoded = try BridgePairingPayload.decode(from: encodedURL)
+
+        #expect(decoded == payload)
+    }
+
+    @Test
+    func relayConfigurationDecodesSnakeCaseAndBuildsEndpoints() throws {
+        let data = Data(#"{"base_url":"https://relay.example","channel":"home_mac","token":"secret"}"#.utf8)
+        let configuration = try JSONDecoder().decode(RelayConfiguration.self, from: data)
+
+        #expect(configuration.publisherURL?.absoluteString ==
+            "wss://relay.example/v1/channels/home_mac?role=publisher")
+        #expect(configuration.subscriberURL?.absoluteString ==
+            "wss://relay.example/v1/channels/home_mac?role=subscriber")
+        #expect(configuration.snapshotURL?.absoluteString ==
+            "https://relay.example/v1/channels/home_mac/snapshot")
+    }
+
+    @Test
+    func pairingRejectsUnsupportedProtocolVersion() throws {
+        let payloadJSON = #"{"protocolVersion":99,"deviceID":"mac","deviceName":"Mac","snapshotURL":"http:\/\/127.0.0.1\/snapshot.json","webSocketURL":"ws:\/\/127.0.0.1\/live","token":"token"}"#
+        let encoded = Data(payloadJSON.utf8).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        let url = try #require(URL(string: "aiusage://pair?payload=\(encoded)"))
+
+        #expect(throws: BridgePairingError.unsupportedVersion(99)) {
+            try BridgePairingPayload.decode(from: url)
+        }
+    }
+}

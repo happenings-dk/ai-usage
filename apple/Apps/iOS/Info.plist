@@ -29,6 +29,27 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>AI Usage connects to the Mac menu app on your local network to refresh usage snapshots.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_aiusage._tcp</string>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>AI Usage scans the pairing code shown by the Mac app.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.happenings.aiusage.pairing</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>aiusage</string>
+			</array>
+		</dict>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -4,158 +4,29 @@ import UniformTypeIdentifiers
 
 @main
 struct AIUsagePhoneApp: App {
+    @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var appDelegate
     @State private var model = MobileUsageModel()
 
     var body: some Scene {
         WindowGroup {
             MobileUsageRootView(model: model)
                 .tint(HapTheme.accent)
-        }
-    }
-}
-
-@MainActor
-@Observable
-final class MobileUsageModel {
-    var snapshot = UsageSnapshot.empty
-    var isRefreshing = false
-    var lastError: String?
-    var lastImportLabel = "Bundled snapshot"
-    var syncURLString: String {
-        didSet {
-            UserDefaults.standard.set(syncURLString, forKey: syncURLDefaultsKey)
-        }
-    }
-
-    @ObservationIgnored private let savedSnapshotDefaultsKey = "savedSnapshot"
-    @ObservationIgnored private let syncURLDefaultsKey = "syncURLString"
-
-    init() {
-        syncURLString = UserDefaults.standard.string(forKey: syncURLDefaultsKey) ??
-            Self.bundledDefaultBridgeURL() ??
-            ""
-        loadInitialSnapshot()
-        if canRefresh {
-            refreshFromSyncURL()
-        }
-    }
-
-    var canRefresh: Bool {
-        URL(string: syncURLString.trimmingCharacters(in: .whitespacesAndNewlines)) != nil
-    }
-
-    var currentWindowBillableTotal: Int {
-        snapshot.summaries.reduce(0) { $0 + $1.currentWindowUsage.billableApproximation }
-    }
-
-    var weekBillableTotal: Int {
-        snapshot.summaries.reduce(0) { $0 + $1.weekUsage.billableApproximation }
-    }
-
-    var activeSummaries: [SourceUsageSummary] {
-        snapshot.summaries.filter(\.hasActivity) + snapshot.summaries.filter { !$0.hasActivity }
-    }
-
-    func refreshFromSyncURL() {
-        let trimmed = syncURLString.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed) else {
-            lastError = "Invalid sync URL"
-            return
-        }
-
-        isRefreshing = true
-        lastError = nil
-        Task {
-            do {
-                let (data, _) = try await URLSession.shared.data(from: url)
-                try applySnapshotData(data, label: url.host ?? url.lastPathComponent)
-            } catch {
-                lastError = error.localizedDescription
-            }
-            isRefreshing = false
-        }
-    }
-
-    func importClipboardText(_ text: String?) {
-        guard let data = text?.data(using: .utf8) else {
-            lastError = "Clipboard did not contain JSON"
-            return
-        }
-
-        do {
-            try applySnapshotData(data, label: "Clipboard")
-        } catch {
-            lastError = error.localizedDescription
-        }
-    }
-
-    func importFile(_ result: Result<URL, Error>) {
-        Task {
-            do {
-                let url = try result.get()
-                let isScoped = url.startAccessingSecurityScopedResource()
-                defer {
-                    if isScoped {
-                        url.stopAccessingSecurityScopedResource()
+                .onOpenURL(perform: model.pair)
+                .task {
+                    appDelegate.backgroundRefreshHandler = { [weak model] in
+                        await model?.refreshInBackground() ?? false
                     }
+                    await model.registerForRemoteUpdates()
                 }
-
-                let data = try Data(contentsOf: url)
-                try applySnapshotData(data, label: url.lastPathComponent)
-            } catch {
-                lastError = error.localizedDescription
-            }
         }
-    }
-
-    private func loadInitialSnapshot() {
-        if let saved = UserDefaults.standard.data(forKey: savedSnapshotDefaultsKey),
-           let decoded = try? decodeSnapshot(from: saved) {
-            snapshot = decoded
-            lastImportLabel = "Saved snapshot"
-            return
-        }
-
-        guard let url = Bundle.main.url(forResource: "SeedSnapshot", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let decoded = try? decodeSnapshot(from: data) else {
-            return
-        }
-
-        snapshot = decoded
-    }
-
-    private func applySnapshotData(_ data: Data, label: String) throws {
-        let decoded = try decodeSnapshot(from: data)
-        snapshot = decoded
-        lastImportLabel = label
-        lastError = nil
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        UserDefaults.standard.set(try encoder.encode(decoded), forKey: savedSnapshotDefaultsKey)
-    }
-
-    private func decodeSnapshot(from data: Data) throws -> UsageSnapshot {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(UsageSnapshot.self, from: data)
-    }
-
-    private static func bundledDefaultBridgeURL() -> String? {
-        guard let url = Bundle.main.url(forResource: "DefaultBridgeURL", withExtension: "txt"),
-              let contents = try? String(contentsOf: url, encoding: .utf8) else {
-            return nil
-        }
-
-        let trimmed = contents.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 }
 
 struct MobileUsageRootView: View {
     @Bindable var model: MobileUsageModel
+    @Environment(\.scenePhase) private var scenePhase
     @State private var isShowingImporter = false
-    @State private var isShowingSyncSettings = false
+    @State private var presentedSheet: MobileSheet?
 
     var body: some View {
         NavigationStack {
@@ -167,7 +38,13 @@ struct MobileUsageRootView: View {
                         .padding(.top, HapTheme.Space.xs)
 
                     ForEach(model.activeSummaries, id: \.source) { summary in
-                        MobileSourceCard(summary: summary)
+                        Button {
+                            presentedSheet = .source(summary.source)
+                        } label: {
+                            MobileSourceCard(summary: summary)
+                        }
+                        .buttonStyle(HapPressableStyle(scale: 0.98))
+                        .accessibilityHint("Shows detailed \(summary.source.rawValue) usage")
                     }
 
                     HapSectionHeader(title: "Sync")
@@ -180,6 +57,14 @@ struct MobileUsageRootView: View {
             .background(HapTheme.background)
             .navigationTitle("AI Usage")
             .navigationBarTitleDisplayMode(.inline)
+            .task(id: scenePhase) {
+                guard scenePhase == .active else {
+                    await model.disconnect()
+                    return
+                }
+                model.startDiscovery()
+                await model.runLiveUpdates()
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -204,7 +89,7 @@ struct MobileUsageRootView: View {
                         }
 
                         Button {
-                            isShowingSyncSettings = true
+                            presentedSheet = .sync
                         } label: {
                             Label("Sync Settings", systemImage: "link")
                         }
@@ -227,10 +112,31 @@ struct MobileUsageRootView: View {
                     urls.first ?? URL(fileURLWithPath: "")
                 })
             }
-            .sheet(isPresented: $isShowingSyncSettings) {
-                SyncSettingsSheet(model: model)
-                    .presentationDetents([.medium])
+            .sheet(item: $presentedSheet) { sheet in
+                switch sheet {
+                case .source(let source):
+                    SourceDetailSheet(model: model, source: source)
+                        .presentationDetents([.medium, .large])
+                        .presentationDragIndicator(.visible)
+                case .sync:
+                    SyncSettingsSheet(model: model)
+                        .presentationDetents([.medium, .large])
+                }
             }
+        }
+    }
+}
+
+private enum MobileSheet: Identifiable {
+    case source(UsageSource)
+    case sync
+
+    var id: String {
+        switch self {
+        case .source(let source):
+            "source-\(source.id)"
+        case .sync:
+            "sync"
         }
     }
 }
@@ -377,8 +283,8 @@ private struct MobileSourceCard: View {
                 Image(systemName: summary.source.symbolName)
                     .font(.headline)
                     .frame(width: 34, height: 34)
-                    .foregroundStyle(sourceColor)
-                    .background(sourceColor.opacity(0.12), in: RoundedRectangle(cornerRadius: HapTheme.Radius.control, style: .continuous))
+                    .foregroundStyle(HapTheme.accent)
+                    .background(HapTheme.surfaceInset, in: RoundedRectangle(cornerRadius: HapTheme.Radius.control, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(summary.source.rawValue)
@@ -398,6 +304,10 @@ private struct MobileSourceCard: View {
                     .foregroundStyle(HapTheme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(HapTheme.textTertiary)
             }
 
             HStack(spacing: HapTheme.Space.sm) {
@@ -430,19 +340,6 @@ private struct MobileSourceCard: View {
             }
         }
         .accessibilityElement(children: .combine)
-    }
-
-    private var sourceColor: Color {
-        switch summary.source {
-        case .claude:
-            .pink
-        case .codex:
-            .indigo
-        case .gemini:
-            .teal
-        case .grok:
-            .orange
-        }
     }
 
     private func projectName(_ value: String) -> String {
@@ -638,7 +535,7 @@ private struct SnapshotFooterView: View {
             }
 
             HStack {
-                Text(model.lastImportLabel)
+                Label(model.connectionStatusLabel, systemImage: model.connectionStatusSymbol)
                     .font(.caption)
                     .foregroundStyle(HapTheme.textSecondary)
                     .lineLimit(1)
@@ -655,11 +552,39 @@ private struct SnapshotFooterView: View {
 private struct SyncSettingsSheet: View {
     @Bindable var model: MobileUsageModel
     @Environment(\.dismiss) private var dismiss
+    @State private var isShowingScanner = false
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("JSON Feed") {
+                Section {
+                    Button {
+                        isShowingScanner = true
+                    } label: {
+                        Label("Scan Pairing Code", systemImage: "qrcode.viewfinder")
+                    }
+
+                    PasteButton(payloadType: String.self) { values in
+                        model.importClipboardText(values.first)
+                    }
+                } header: {
+                    Text("Pair your Mac")
+                } footer: {
+                    Text("Open AI Usage on your Mac, then scan or paste its pairing link.")
+                }
+
+                Section("Nearby") {
+                    if model.discoveredBridges.isEmpty {
+                        Label("Looking for Macs", systemImage: "antenna.radiowaves.left.and.right")
+                            .foregroundStyle(HapTheme.textSecondary)
+                    } else {
+                        ForEach(model.discoveredBridges) { bridge in
+                            Label(bridge.name, systemImage: "desktopcomputer")
+                        }
+                    }
+                }
+
+                Section("Fallback URL") {
                     TextField("https://example.com/ai-usage.json", text: $model.syncURLString)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -675,6 +600,9 @@ private struct SyncSettingsSheet: View {
                     }
                     .disabled(!model.canRefresh || model.isRefreshing)
                 }
+            }
+            .fullScreenCover(isPresented: $isShowingScanner) {
+                PairingScannerView(onCode: model.pair)
             }
             .navigationTitle("Sync")
             .navigationBarTitleDisplayMode(.inline)

@@ -1,6 +1,6 @@
 import Foundation
 
-enum UsageSource: String, CaseIterable, Identifiable, Codable {
+enum UsageSource: String, CaseIterable, Identifiable, Codable, Sendable {
     case claude = "Claude"
     case codex = "Codex"
     case gemini = "Gemini"
@@ -22,7 +22,7 @@ enum UsageSource: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-struct TokenUsage: Codable, Equatable {
+struct TokenUsage: Codable, Equatable, Sendable {
     var input: Int
     var cachedInput: Int
     var cacheCreationInput: Int
@@ -60,7 +60,7 @@ struct TokenUsage: Codable, Equatable {
     }
 }
 
-struct UsageEvent: Identifiable, Equatable, Codable {
+struct UsageEvent: Identifiable, Equatable, Codable, Sendable {
     let id: String
     let source: UsageSource
     let timestamp: Date
@@ -69,19 +69,19 @@ struct UsageEvent: Identifiable, Equatable, Codable {
     let project: String?
 }
 
-struct RateLimitWindow: Equatable, Codable {
+struct RateLimitWindow: Equatable, Codable, Sendable {
     let name: String
     let usedPercent: Double
     let windowMinutes: Int
     let resetsAt: Date
 }
 
-struct RateLimitSnapshot: Equatable, Codable {
+struct RateLimitSnapshot: Equatable, Codable, Sendable {
     let updatedAt: Date
     let windows: [RateLimitWindow]
 }
 
-struct ProjectUsage: Identifiable, Equatable, Codable {
+struct ProjectUsage: Identifiable, Equatable, Codable, Sendable {
     let name: String
     let usage: TokenUsage
     let eventCount: Int
@@ -89,14 +89,14 @@ struct ProjectUsage: Identifiable, Equatable, Codable {
     var id: String { name }
 }
 
-struct SourceUsageDetail: Identifiable, Equatable, Codable {
+struct SourceUsageDetail: Identifiable, Equatable, Codable, Sendable {
     let title: String
     let value: String
 
     var id: String { title }
 }
 
-struct CLIVersionStatus: Identifiable, Equatable, Codable {
+struct CLIVersionStatus: Identifiable, Equatable, Codable, Sendable {
     let source: UsageSource
     let installedVersion: String?
     let latestVersion: String?
@@ -115,7 +115,7 @@ struct CLIVersionStatus: Identifiable, Equatable, Codable {
     }
 }
 
-struct AppUpdateStatus: Equatable, Codable {
+struct AppUpdateStatus: Equatable, Codable, Sendable {
     let currentVersion: String
     let latestVersion: String?
     let downloadURL: URL?
@@ -150,7 +150,7 @@ struct AppUpdateStatus: Equatable, Codable {
     )
 }
 
-struct SourceUsageSummary: Equatable, Codable {
+struct SourceUsageSummary: Equatable, Codable, Sendable {
     let source: UsageSource
     let scannedFiles: Int
     let eventCount: Int
@@ -204,7 +204,7 @@ struct SourceUsageSummary: Equatable, Codable {
     }
 }
 
-struct UsageSnapshot: Equatable, Codable {
+struct UsageSnapshot: Equatable, Codable, Sendable {
     let generatedAt: Date
     let summaries: [SourceUsageSummary]
     let cliVersions: [CLIVersionStatus]

@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "ai-usage-relay",
+  "account_id": "013fe5d1d530ce132fbe2d644248f5e2",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-10",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CHANNELS",
+        "class_name": "UsageChannel"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["UsageChannel"]
+    }
+  ]
+}

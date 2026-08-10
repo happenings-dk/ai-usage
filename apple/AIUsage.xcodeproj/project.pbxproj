@@ -8,23 +8,40 @@
 
 /* Begin PBXBuildFile section */
 		270ED880D495B76DF00EC2EB /* AIUsagePhoneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CD15AF65854AAAB277D8D17 /* AIUsagePhoneApp.swift */; };
+		33B79B97B7B255F93B6A502D /* MobileUsageModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED062E1934EEC7F09DCCC9E6 /* MobileUsageModel.swift */; };
 		3923F45CA0C02A09606F051A /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF3528283359E4726B54C96B /* Models.swift */; };
+		41F32BC1C77359EF745B9486 /* BridgeDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC9A71BDA956BC0DED13722A /* BridgeDiscovery.swift */; };
+		512FF4CE6306C409944F67AB /* BridgeProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7154875F31F16BF71D719E7 /* BridgeProtocol.swift */; };
+		6303309B1F2806B46119F26E /* DefaultBridgeURL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 53A279E3A6D24ABA237CAFC0 /* DefaultBridgeURL.txt */; };
+		69CEBC48930B8F8F71817D16 /* SnapshotStreamClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8343C2E1CCA820A33CFCA9FB /* SnapshotStreamClient.swift */; };
 		7415BEFF1FD739F44AC5C25A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 44613F83FBD24F97DB3C2E71 /* Assets.xcassets */; };
 		7B7DC77E1D78E4C9CFD9C1F0 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2426355929B147F9B9D59DC /* Formatting.swift */; };
+		7F7BC3B34C3D201C821A09CA /* PairingScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2691B25B07B663C863C34391 /* PairingScannerView.swift */; };
+		967914B5DF620CFE1C661AB5 /* PushNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05E8408C004CE656BFBBCB09 /* PushNotifications.swift */; };
 		C967D3912E49DED9060702C4 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = BEEDD3A4B8B54B7640A2FE52 /* LaunchScreen.storyboard */; };
+		CBD53B4651B1A5B4F76A385B /* SourceDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A171E077A5CD080C61E5A71 /* SourceDetailSheet.swift */; };
 		D1EA2E6C2460092AACCBEE64 /* HappeningsTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB23A18C36877A999F0A645D /* HappeningsTokens.swift */; };
 		F07CE6EE01E010A859476EE8 /* SeedSnapshot.json in Resources */ = {isa = PBXBuildFile; fileRef = 211A2139F4BA7653FFFC6FD0 /* SeedSnapshot.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		05E8408C004CE656BFBBCB09 /* PushNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotifications.swift; sourceTree = "<group>"; };
+		0B6529231504637C7DC37AB2 /* AIUsage.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AIUsage.entitlements; sourceTree = "<group>"; };
 		211A2139F4BA7653FFFC6FD0 /* SeedSnapshot.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = SeedSnapshot.json; sourceTree = "<group>"; };
 		2555313622A85A5E1B06B280 /* AIUsage.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AIUsage.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2691B25B07B663C863C34391 /* PairingScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingScannerView.swift; sourceTree = "<group>"; };
+		2A171E077A5CD080C61E5A71 /* SourceDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceDetailSheet.swift; sourceTree = "<group>"; };
 		44613F83FBD24F97DB3C2E71 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		53A279E3A6D24ABA237CAFC0 /* DefaultBridgeURL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = DefaultBridgeURL.txt; sourceTree = "<group>"; };
+		8343C2E1CCA820A33CFCA9FB /* SnapshotStreamClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotStreamClient.swift; sourceTree = "<group>"; };
 		9CD15AF65854AAAB277D8D17 /* AIUsagePhoneApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIUsagePhoneApp.swift; sourceTree = "<group>"; };
 		AB23A18C36877A999F0A645D /* HappeningsTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HappeningsTokens.swift; sourceTree = "<group>"; };
 		BEEDD3A4B8B54B7640A2FE52 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		C1DECAFFDC7C835B7E7884D3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		C7154875F31F16BF71D719E7 /* BridgeProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeProtocol.swift; sourceTree = "<group>"; };
 		E2426355929B147F9B9D59DC /* Formatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Formatting.swift; sourceTree = "<group>"; };
+		EC9A71BDA956BC0DED13722A /* BridgeDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeDiscovery.swift; sourceTree = "<group>"; };
+		ED062E1934EEC7F09DCCC9E6 /* MobileUsageModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileUsageModel.swift; sourceTree = "<group>"; };
 		FF3528283359E4726B54C96B /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -50,6 +67,7 @@
 		4AEAB316C57B214ABDE49E15 /* AiUsageMenuApp */ = {
 			isa = PBXGroup;
 			children = (
+				C7154875F31F16BF71D719E7 /* BridgeProtocol.swift */,
 				E2426355929B147F9B9D59DC /* Formatting.swift */,
 				FF3528283359E4726B54C96B /* Models.swift */,
 			);
@@ -76,6 +94,7 @@
 			isa = PBXGroup;
 			children = (
 				44613F83FBD24F97DB3C2E71 /* Assets.xcassets */,
+				53A279E3A6D24ABA237CAFC0 /* DefaultBridgeURL.txt */,
 				211A2139F4BA7653FFFC6FD0 /* SeedSnapshot.json */,
 			);
 			path = Resources;
@@ -92,10 +111,17 @@
 		EED0F232008B7B8936F0410F /* iOS */ = {
 			isa = PBXGroup;
 			children = (
+				0B6529231504637C7DC37AB2 /* AIUsage.entitlements */,
 				9CD15AF65854AAAB277D8D17 /* AIUsagePhoneApp.swift */,
+				EC9A71BDA956BC0DED13722A /* BridgeDiscovery.swift */,
 				AB23A18C36877A999F0A645D /* HappeningsTokens.swift */,
 				C1DECAFFDC7C835B7E7884D3 /* Info.plist */,
 				BEEDD3A4B8B54B7640A2FE52 /* LaunchScreen.storyboard */,
+				ED062E1934EEC7F09DCCC9E6 /* MobileUsageModel.swift */,
+				2691B25B07B663C863C34391 /* PairingScannerView.swift */,
+				05E8408C004CE656BFBBCB09 /* PushNotifications.swift */,
+				8343C2E1CCA820A33CFCA9FB /* SnapshotStreamClient.swift */,
+				2A171E077A5CD080C61E5A71 /* SourceDetailSheet.swift */,
 				AD388145A45BAC7A0584483C /* Resources */,
 			);
 			path = iOS;
@@ -138,7 +164,6 @@
 				};
 			};
 			buildConfigurationList = 675A56653B4760E375E29321 /* Build configuration list for PBXProject "AIUsage" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -148,6 +173,7 @@
 			mainGroup = 1A9B208FA40296A655AEFA28;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
+			productRefGroup = D1EA4B205244318972602FEE /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -162,6 +188,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				7415BEFF1FD739F44AC5C25A /* Assets.xcassets in Resources */,
+				6303309B1F2806B46119F26E /* DefaultBridgeURL.txt in Resources */,
 				C967D3912E49DED9060702C4 /* LaunchScreen.storyboard in Resources */,
 				F07CE6EE01E010A859476EE8 /* SeedSnapshot.json in Resources */,
 			);
@@ -175,9 +202,16 @@
 			buildActionMask = 2147483647;
 			files = (
 				270ED880D495B76DF00EC2EB /* AIUsagePhoneApp.swift in Sources */,
+				41F32BC1C77359EF745B9486 /* BridgeDiscovery.swift in Sources */,
+				512FF4CE6306C409944F67AB /* BridgeProtocol.swift in Sources */,
 				7B7DC77E1D78E4C9CFD9C1F0 /* Formatting.swift in Sources */,
 				D1EA2E6C2460092AACCBEE64 /* HappeningsTokens.swift in Sources */,
+				33B79B97B7B255F93B6A502D /* MobileUsageModel.swift in Sources */,
 				3923F45CA0C02A09606F051A /* Models.swift in Sources */,
+				7F7BC3B34C3D201C821A09CA /* PairingScannerView.swift in Sources */,
+				967914B5DF620CFE1C661AB5 /* PushNotifications.swift in Sources */,
+				69CEBC48930B8F8F71817D16 /* SnapshotStreamClient.swift in Sources */,
+				CBD53B4651B1A5B4F76A385B /* SourceDetailSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -187,7 +221,9 @@
 		09E418532F18B729B4E96F4B /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Apps/iOS/AIUsage.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Apps/iOS/Info.plist;
@@ -206,7 +242,9 @@
 		3BC23D36470B6D85F4023411 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APS_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Apps/iOS/AIUsage.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Apps/iOS/Info.plist;

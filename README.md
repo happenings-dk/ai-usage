@@ -16,6 +16,9 @@ It reads local transcript files, displays rolling token usage, shows reset windo
 - Top projects by 7 day billable usage.
 - Installed vs latest CLI versions for Claude, Codex, Gemini, and Grok.
 - GitHub Releases based over-the-air app updates.
+- Native iPhone dashboard with QR pairing and cached offline snapshots.
+- Real-time Mac-to-iPhone updates over Bonjour, Tailscale, or an authenticated Cloudflare relay.
+- APNs background refresh when iOS suspends the live WebSocket.
 
 ## Data Sources
 
@@ -45,6 +48,13 @@ flowchart TD
     D --> L[Grok update check]
     D --> M[GitHub Releases latest]
     B --> N[SwiftUI popover]
+    B --> O[FSEvents watcher]
+    B --> P[Authenticated bridge]
+    P --> Q[Bonjour / Tailscale]
+    P --> R[Cloudflare relay]
+    Q --> S[iPhone app]
+    R --> S
+    R --> T[APNs background wake]
 ```
 
 ```mermaid
@@ -93,6 +103,30 @@ If the cache is missing or older than 24 hours, the app falls back to local rese
 ```sh
 swift run AiUsageMenu
 ```
+
+## Live iPhone Sync
+
+The Mac watches the four CLI data directories with FSEvents and rebuilds a snapshot after a short debounce. It broadcasts each versioned snapshot over an authenticated WebSocket and keeps HTTP as a one-shot fallback. The bridge is never unauthenticated: its device ID and local bearer token are generated in `~/.ai-usage` and embedded in the pairing QR.
+
+Build and install the iPhone app from `apple/AIUsage.xcodeproj`, then open the Mac app's Settings and scan **Pair iPhone**. The phone chooses transports in this order:
+
+1. Bonjour on the same LAN, with no DNS or address setup.
+2. A direct `100.x` address when both devices are on the same Tailscale network.
+3. The configured `wss://` relay when the Mac and phone cannot reach each other directly.
+
+The phone caches the newest valid snapshot, reconnects with exponential backoff, and shows whether it is live, reconnecting, or offline. Pairing links contain credentials; treat the QR/link like a password and pair again after rotating either token.
+
+### Internet relay
+
+The deployable Cloudflare Worker lives in [`relay/`](relay/README.md). It uses one hibernatable Durable Object per channel, stores only the newest snapshot, and requires the same bearer credential for publishing, subscribing, snapshot fallback, and APNs registration. The Mac only makes an outbound connection, so the relay requires no inbound firewall or router configuration.
+
+This workspace is configured against:
+
+```text
+https://ai-usage-relay.happenings.workers.dev
+```
+
+See the relay README for deployment, token rotation, and APNs secret setup. Foreground delivery is genuinely real-time over WebSocket. Background APNs delivery is opportunistic by iOS design and throttled to at most once every 20 minutes per channel.
 
 ## Install On macOS
 

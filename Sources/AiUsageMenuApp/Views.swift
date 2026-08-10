@@ -1,3 +1,4 @@
+import CoreImage.CIFilterBuiltins
 import SwiftUI
 
 struct UsageDashboardView: View {
@@ -58,8 +59,8 @@ struct UsageDashboardView: View {
                     Button("Copy Summary") {
                         model.copySummary()
                     }
-                    Button("Copy iPhone Bridge URL") {
-                        model.copyBridgeURL()
+                    Button("Copy iPhone Pairing Link") {
+                        model.copyPairingLink()
                     }
                     Button("Copy CLI Update Commands") {
                         model.copyUpdateCommands()
@@ -785,13 +786,23 @@ struct SettingsView: View {
             }
 
             Section("iPhone Bridge") {
-                LabeledContent("Snapshot URL") {
+                if let pairingURL = model.pairingURL {
+                    HStack {
+                        Spacer()
+                        PairingQRCodeView(value: pairingURL.absoluteString)
+                        Spacer()
+                    }
+                    Button("Copy Pairing Link") {
+                        model.copyPairingLink()
+                    }
+                }
+                LabeledContent("Live URL") {
                     Text(model.bridgeURLText)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-                Button("Copy Bridge URL") {
+                Button("Copy Snapshot URL") {
                     model.copyBridgeURL()
                 }
             }
@@ -810,5 +821,40 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+private struct PairingQRCodeView: View {
+    let value: String
+
+    var body: some View {
+        if let image = makeImage() {
+            Image(nsImage: image)
+                .interpolation(.none)
+                .resizable()
+                .frame(width: 160, height: 160)
+                .padding(12)
+                .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(.black.opacity(0.12), lineWidth: 1)
+                }
+                .accessibilityLabel("iPhone pairing code")
+        }
+    }
+
+    private func makeImage() -> NSImage? {
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(value.utf8)
+        filter.correctionLevel = "M"
+        guard let output = filter.outputImage else {
+            return nil
+        }
+        let context = CIContext()
+        let scaled = output.transformed(by: CGAffineTransform(scaleX: 10, y: 10))
+        guard let image = context.createCGImage(scaled, from: scaled.extent) else {
+            return nil
+        }
+        return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
     }
 }

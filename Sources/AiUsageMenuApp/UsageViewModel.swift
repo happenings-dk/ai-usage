@@ -14,15 +14,35 @@ final class UsageViewModel {
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var versionRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private var versionTimer: Timer?
+    @ObservationIgnored private var fileWatcher: UsageFileWatcher?
     @ObservationIgnored private let bridgeServer = BridgeServer.shared
 
     init() {
         bridgeServer.start()
         refresh()
+        fileWatcher = UsageFileWatcher { [weak self] in
+            Task { @MainActor in
+                self?.refreshUsage()
+            }
+        }
+        fileWatcher?.start()
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.refresh()
+                self?.refreshUsage()
             }
+        }
+        versionTimer = Timer.scheduledTimer(withTimeInterval: 15 * 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshVersions()
+            }
+        }
+        Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else {
+                return
+            }
+            updateBridgeURLText()
         }
     }
 
@@ -38,9 +58,24 @@ final class UsageViewModel {
         return "AI"
     }
 
+    var pairingURL: URL? {
+        bridgeServer.pairingPayload?.encodedPairingURL()
+    }
+
     func refresh() {
+        refreshUsage(includeVersions: true)
+    }
+
+    /// Rebuilds local usage immediately without waiting for the fallback timer.
+    func refreshUsage() {
+        refreshUsage(includeVersions: false)
+    }
+
+    private func refreshUsage(includeVersions: Bool) {
         refreshTask?.cancel()
-        versionRefreshTask?.cancel()
+        if includeVersions {
+            versionRefreshTask?.cancel()
+        }
         isRefreshing = true
         lastError = nil
 
@@ -60,22 +95,30 @@ final class UsageViewModel {
             publishBridgeSnapshot()
             isRefreshing = false
 
-            versionRefreshTask = Task {
-                let checkedAt = Date()
-                let versionSnapshot = await Task.detached(priority: .utility) {
-                    VersionStore().load(now: checkedAt)
-                }.value
-
-                guard !Task.isCancelled else { return }
-                snapshot = UsageSnapshot(
-                    generatedAt: snapshot.generatedAt,
-                    summaries: snapshot.summaries,
-                    cliVersions: versionSnapshot.cliVersions,
-                    appUpdate: versionSnapshot.appUpdate
-                )
-                publishBridgeSnapshot()
-                isRefreshing = false
+            if includeVersions {
+                refreshVersions()
             }
+        }
+    }
+
+    private func refreshVersions() {
+        versionRefreshTask?.cancel()
+        versionRefreshTask = Task {
+            let checkedAt = Date()
+            // Version probes invoke subprocesses and network requests, so they
+            // deliberately run outside the main actor.
+            let versionSnapshot = await Task.detached(priority: .utility) {
+                VersionStore().load(now: checkedAt)
+            }.value
+
+            guard !Task.isCancelled else { return }
+            snapshot = UsageSnapshot(
+                generatedAt: snapshot.generatedAt,
+                summaries: snapshot.summaries,
+                cliVersions: versionSnapshot.cliVersions,
+                appUpdate: versionSnapshot.appUpdate
+            )
+            publishBridgeSnapshot()
         }
     }
 
@@ -137,8 +180,19 @@ final class UsageViewModel {
             return
         }
 
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "token", value: bridgeServer.token)]
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+        NSPasteboard.general.setString(components?.url?.absoluteString ?? url.absoluteString, forType: .string)
+    }
+
+    func copyPairingLink() {
+        updateBridgeURLText()
+        guard let pairingURL = bridgeServer.pairingPayload?.encodedPairingURL() else {
+            return
+        }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(pairingURL.absoluteString, forType: .string)
     }
 
     func copyUpdateCommands() {
@@ -173,7 +227,7 @@ final class UsageViewModel {
     }
 
     private func updateBridgeURLText() {
-        if let url = bridgeServer.bridgeURL {
+        if let url = bridgeServer.webSocketURL {
             bridgeURLText = url.absoluteString
         } else if let url = bridgeServer.localhostURL {
             bridgeURLText = url.absoluteString
