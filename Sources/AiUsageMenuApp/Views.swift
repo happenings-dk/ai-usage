@@ -3,10 +3,15 @@ import SwiftUI
 
 struct UsageDashboardView: View {
     let model: UsageViewModel
+    let openDashboard: () -> Void
+    let showQuickAccess: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HeaderView(model: model)
+            HeaderView(
+                model: model,
+                openDashboard: openDashboard
+            )
 
             ScrollView {
                 VStack(spacing: 10) {
@@ -29,8 +34,14 @@ struct UsageDashboardView: View {
                         cliVersions: model.snapshot.cliVersions,
                         appUpdate: model.snapshot.appUpdate,
                         isInstallingAppUpdate: model.isInstallingUpdate,
+                        isCheckingVersions: model.isCheckingVersions,
+                        isCheckingAppVersion: model.isCheckingAppVersion,
+                        isCheckingVersion: model.isCheckingVersion,
                         copyUpdateCommand: model.copyUpdateCommand,
-                        installAppUpdate: model.installAppUpdate
+                        installAppUpdate: model.installAppUpdate,
+                        checkAllVersions: model.checkVersions,
+                        checkVersion: model.checkVersion,
+                        checkAppVersion: model.checkAppVersion
                     )
                 }
                 .padding(.trailing, 4)
@@ -56,6 +67,9 @@ struct UsageDashboardView: View {
                 .disabled(model.isRefreshing)
 
                 Menu {
+                    Button("Open Dashboard", systemImage: "macwindow", action: openDashboard)
+                    Button("Show Quick Look", systemImage: "bolt", action: showQuickAccess)
+                    Divider()
                     Button("Copy Summary") {
                         model.copySummary()
                     }
@@ -66,8 +80,7 @@ struct UsageDashboardView: View {
                         model.copyUpdateCommands()
                     }
                     .disabled(!model.snapshot.cliVersions.contains { $0.isOutdated })
-                    if model.snapshot.appUpdate.isUpdateAvailable,
-                       model.snapshot.appUpdate.downloadURL != nil {
+                    if model.snapshot.appUpdate.canInstallAutomatically {
                         Button("Install App Update") {
                             model.installAppUpdate()
                         }
@@ -124,6 +137,7 @@ struct UsageDashboardView: View {
 
 private struct HeaderView: View {
     let model: UsageViewModel
+    let openDashboard: () -> Void
 
     var body: some View {
         HStack(alignment: .center) {
@@ -137,9 +151,16 @@ private struct HeaderView: View {
 
             Spacer()
 
-            if model.isRefreshing || model.isInstallingUpdate {
-                ProgressView()
+            HStack(spacing: 8) {
+                if model.isRefreshing || model.isCheckingVersions || model.isInstallingUpdate {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+
+                Button("Open", systemImage: "macwindow", action: openDashboard)
+                    .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .help("Open full dashboard")
             }
         }
     }
@@ -263,8 +284,14 @@ private struct VersionStatusView: View {
     let cliVersions: [CLIVersionStatus]
     let appUpdate: AppUpdateStatus
     let isInstallingAppUpdate: Bool
+    let isCheckingVersions: Bool
+    let isCheckingAppVersion: Bool
+    let isCheckingVersion: (UsageSource) -> Bool
     let copyUpdateCommand: (CLIVersionStatus) -> Void
     let installAppUpdate: () -> Void
+    let checkAllVersions: () -> Void
+    let checkVersion: (UsageSource) -> Void
+    let checkAppVersion: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -272,21 +299,46 @@ private struct VersionStatusView: View {
                 Text("Versions")
                     .font(.caption.weight(.semibold))
                 Spacer()
-                if let checkedAt = cliVersions.compactMap(\.checkedAt).max() ?? appUpdate.checkedAt {
+                if !isCheckingVersions,
+                   let checkedAt = cliVersions.compactMap(\.checkedAt).max() ?? appUpdate.checkedAt {
                     Text("Checked \(TimeFormat.relative(checkedAt))")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
+
+                Button(action: checkAllVersions) {
+                    if isCheckingVersions {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(width: 44, height: 44)
+                    } else {
+                        Label("Check all", systemImage: "arrow.clockwise")
+                            .font(.caption.weight(.semibold))
+                            .frame(minHeight: 44)
+                    }
+                }
+                .buttonStyle(.happeningsBadge)
+                .disabled(isCheckingVersions)
+                .help("Check every installed CLI and AI Usage")
             }
 
             ForEach(cliVersions) { status in
-                VersionRow(status: status, copyUpdateCommand: copyUpdateCommand)
+                VersionRow(
+                    status: status,
+                    isChecking: isCheckingVersion(status.source),
+                    isCheckDisabled: isCheckingVersions,
+                    copyUpdateCommand: copyUpdateCommand,
+                    checkVersion: { checkVersion(status.source) }
+                )
             }
 
             AppUpdateRow(
                 update: appUpdate,
                 isInstallingUpdate: isInstallingAppUpdate,
-                installUpdate: installAppUpdate
+                isChecking: isCheckingAppVersion,
+                isCheckDisabled: isCheckingVersions,
+                installUpdate: installAppUpdate,
+                checkVersion: checkAppVersion
             )
         }
         .padding(10)
@@ -296,7 +348,10 @@ private struct VersionStatusView: View {
 
 private struct VersionRow: View {
     let status: CLIVersionStatus
+    let isChecking: Bool
+    let isCheckDisabled: Bool
     let copyUpdateCommand: (CLIVersionStatus) -> Void
+    let checkVersion: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -325,10 +380,36 @@ private struct VersionRow: View {
                 } label: {
                     VersionBadge(status: .needsUpdate)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.happeningsBadge)
+                .disabled(isCheckDisabled)
                 .help("Copy \(status.updateCommand)")
+
+                Button(action: checkVersion) {
+                    if isChecking {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+                .frame(minWidth: 44, minHeight: 44)
+                .buttonStyle(.happeningsBadge)
+                .disabled(isCheckDisabled)
+                .help("Check \(status.source.rawValue) again")
             } else {
-                VersionBadge(status: badgeStatus)
+                Button(action: checkVersion) {
+                    if isChecking {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(minWidth: 44, minHeight: 44)
+                    } else {
+                        VersionBadge(status: badgeStatus)
+                            .frame(minHeight: 44)
+                    }
+                }
+                .buttonStyle(.happeningsBadge)
+                .disabled(isCheckDisabled)
+                .help("Check \(status.source.rawValue) again")
             }
         }
         .help(helpText)
@@ -358,7 +439,10 @@ private struct VersionRow: View {
 private struct AppUpdateRow: View {
     let update: AppUpdateStatus
     let isInstallingUpdate: Bool
+    let isChecking: Bool
+    let isCheckDisabled: Bool
     let installUpdate: () -> Void
+    let checkVersion: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -390,17 +474,42 @@ private struct AppUpdateRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            if update.isUpdateAvailable, update.downloadURL != nil {
+            if update.canInstallAutomatically {
                 Button {
                     installUpdate()
                 } label: {
                     VersionBadge(status: .needsUpdate)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.happeningsBadge)
                 .disabled(isInstallingUpdate)
                 .help("Install app update")
+
+                Button(action: checkVersion) {
+                    if isChecking {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+                .frame(minWidth: 44, minHeight: 44)
+                .buttonStyle(.happeningsBadge)
+                .disabled(isCheckDisabled)
+                .help("Check AI Usage again")
             } else {
-                VersionBadge(status: badgeStatus)
+                Button(action: checkVersion) {
+                    if isChecking {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(minWidth: 44, minHeight: 44)
+                    } else {
+                        VersionBadge(status: badgeStatus)
+                            .frame(minHeight: 44)
+                    }
+                }
+                .buttonStyle(.happeningsBadge)
+                .disabled(isCheckDisabled)
+                .help("Check AI Usage again")
             }
         }
         .help(helpText)
@@ -417,11 +526,11 @@ private struct AppUpdateRow: View {
     }
 
     private var helpText: String {
-        if let downloadURL = update.downloadURL, update.isUpdateAvailable {
-            return downloadURL.absoluteString
-        }
         if let error = update.error {
             return error
+        }
+        if let downloadURL = update.downloadURL, update.isUpdateAvailable {
+            return downloadURL.absoluteString
         }
         return update.feedURL?.absoluteString ?? "~/.ai-usage/update-feed-url"
     }
@@ -753,9 +862,36 @@ private struct WarningBadge: View {
 
 struct SettingsView: View {
     let model: UsageViewModel
+    let quickAccessController: QuickAccessController
 
     var body: some View {
         Form {
+            Section("Quick Access") {
+                LabeledContent("Keyboard shortcut") {
+                    ShortcutRecorderView(
+                        shortcutSequence: quickAccessController.shortcutSequence,
+                        shortcutSequenceChanged: quickAccessController.updateShortcutSequence,
+                        recordingChanged: quickAccessController.setShortcutRecording
+                    )
+                    .frame(
+                        width: HappeningsTheme.Layout.shortcutRecorderWidth,
+                        height: 44
+                    )
+                }
+
+                Text("Click, then press one or two modified shortcuts in sequence. Wait briefly or press Return after one shortcut.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if let shortcutError = quickAccessController.shortcutRegistrationError {
+                    Label(shortcutError, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                Button("Reset to ⇧⌘U", action: quickAccessController.resetShortcut)
+            }
+
             Section("Data Sources") {
                 LabeledContent("Claude") {
                     Text("~/.claude/projects")

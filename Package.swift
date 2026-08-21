@@ -8,12 +8,17 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "AiUsageMenu", targets: ["AiUsageMenuApp"])
+        .executable(name: "AiUsageMenu", targets: ["AiUsageMenuApp"]),
+        .executable(name: "AIUsageUpdaterHelper", targets: ["AIUsageUpdaterHelper"])
     ],
     targets: [
         .executableTarget(
             name: "AiUsageMenuApp",
             path: "Sources/AiUsageMenuApp"
+        ),
+        .executableTarget(
+            name: "AIUsageUpdaterHelper",
+            path: "Sources/AIUsageUpdaterHelper"
         ),
         .testTarget(
             name: "AiUsageMenuAppTests",

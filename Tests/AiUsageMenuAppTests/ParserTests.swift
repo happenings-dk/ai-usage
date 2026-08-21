@@ -1,14 +1,109 @@
+import AppKit
+import Carbon.HIToolbox
 import Foundation
 import Testing
 @testable import AiUsageMenuApp
 
 struct ParserTests {
     @Test
+    func formatsDefaultQuickAccessShortcut() {
+        #expect(QuickAccessShortcut.defaultShortcut.displayName == "⇧⌘U")
+        #expect(QuickAccessShortcutSequence.defaultSequence.displayName == "⇧⌘U")
+    }
+
+    @Test
+    func formatsCustomQuickAccessSequence() throws {
+        let sequence = try #require(QuickAccessShortcutSequence(
+            shortcuts: [.defaultShortcut, .defaultShortcut]
+        ))
+
+        #expect(sequence.displayName == "⇧⌘U → ⇧⌘U")
+    }
+
+    @Test
+    func recordsCustomQuickAccessShortcut() throws {
+        let event = try #require(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [.control, .option],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: " ",
+            charactersIgnoringModifiers: " ",
+            isARepeat: false,
+            keyCode: UInt16(kVK_Space)
+        ))
+
+        let shortcut = try #require(QuickAccessShortcut(event: event))
+        #expect(shortcut.displayName == "⌃⌥Space")
+    }
+
+    @Test
+    func rejectsUnsafeUnmodifiedGlobalShortcut() throws {
+        let event = try #require(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "u",
+            charactersIgnoringModifiers: "u",
+            isARepeat: false,
+            keyCode: UInt16(kVK_ANSI_U)
+        ))
+
+        #expect(QuickAccessShortcut(event: event) == nil)
+    }
+
+    @Test
     func extractsAndComparesVersions() {
         #expect(VersionStore.extractVersion(from: "claude-code 2.1.90") == "2.1.90")
         #expect(VersionStore.extractVersion(from: "codex-cli 0.128.0") == "0.128.0")
         #expect(VersionComparison.isVersion("0.127.0", olderThan: "0.128.0"))
         #expect(!VersionComparison.isVersion("2.1.90", olderThan: "2.1.90"))
+    }
+
+    @Test
+    func parsesLatestVersionFromNPMRegistry() throws {
+        let data = try #require(
+            #"{"name":"@openai/codex","version":"0.148.0"}"#.data(using: .utf8)
+        )
+
+        #expect(VersionStore.parseNPMLatestVersion(from: data) == "0.148.0")
+        #expect(
+            VersionStore.npmLatestURL(packageName: "@openai/codex")?.absoluteString ==
+                "https://registry.npmjs.org/%40openai%2Fcodex/latest"
+        )
+    }
+
+    @Test
+    func searchesUserCLILocationsAndDefaultNVMBeforeSystemPaths() throws {
+        let directories = CommandRunner.executableSearchDirectories(
+            environment: ["PATH": "/usr/bin:/opt/homebrew/bin"],
+            homeDirectory: "/Users/example",
+            nvmVersionNames: ["v20.19.0", "v22.21.1"],
+            nvmDefaultAlias: "22"
+        )
+
+        #expect(directories.first == "/Users/example/.local/bin")
+        let nvmIndex = try #require(
+            directories.firstIndex(of: "/Users/example/.nvm/versions/node/v22.21.1/bin")
+        )
+        let homebrewIndex = try #require(directories.firstIndex(of: "/opt/homebrew/bin"))
+        #expect(nvmIndex < homebrewIndex)
+    }
+
+    @Test
+    func usesNativeClaudeUpdaterForLocalInstallation() {
+        let command = VersionStore.recommendedUpdateCommand(
+            for: .claude,
+            defaultCommand: "npm install -g @anthropic-ai/claude-code",
+            installedAt: URL(fileURLWithPath: "/Users/example/.local/bin/claude")
+        )
+
+        #expect(command == "claude update")
     }
 
     @Test
@@ -21,6 +116,10 @@ struct ParserTests {
             {
               "name": "AIUsageMenu-0.2.0.zip",
               "browser_download_url": "https://github.com/happenings-dk/ai-usage/releases/download/v0.2.0/AIUsageMenu-0.2.0.zip"
+            },
+            {
+              "name": "checksums.txt",
+              "browser_download_url": "https://github.com/happenings-dk/ai-usage/releases/download/v0.2.0/checksums.txt"
             }
           ]
         }
@@ -38,6 +137,37 @@ struct ParserTests {
         #expect(status.githubRepository == "happenings-dk/ai-usage")
         #expect(status.assetName == "AIUsageMenu-0.2.0.zip")
         #expect(status.downloadURL?.absoluteString.hasSuffix("AIUsageMenu-0.2.0.zip") == true)
+        #expect(status.checksumURL?.absoluteString.hasSuffix("checksums.txt") == true)
+        #expect(!status.canInstallAutomatically)
+
+        let verifiedStatus = status.replacingVerification(
+            sha256: String(repeating: "a", count: 64),
+            error: nil
+        )
+        #expect(verifiedStatus.canInstallAutomatically)
+    }
+
+    @Test
+    func parsesReleaseChecksumForMatchingAsset() {
+        let manifest = """
+        aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  AIUsageMenu-0.2.0.zip
+        bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  AIUsageMenu.dmg
+        """
+
+        let checksum = VersionStore.parseChecksumManifest(
+            Data(manifest.utf8),
+            assetName: "AIUsageMenu-0.2.0.zip"
+        )
+
+        #expect(checksum == String(repeating: "a", count: 64))
+    }
+
+    @Test
+    func hashesDownloadedUpdateData() {
+        #expect(
+            AppUpdater.sha256(for: Data("hello".utf8)) ==
+                "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        )
     }
 
     @Test

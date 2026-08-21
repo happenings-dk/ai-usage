@@ -123,6 +123,8 @@ struct AppUpdateStatus: Equatable, Codable, Sendable {
     let feedURL: URL?
     let githubRepository: String?
     let assetName: String?
+    let sha256: String?
+    let checksumURL: URL?
     let checkedAt: Date?
     let error: String?
 
@@ -137,6 +139,26 @@ struct AppUpdateStatus: Equatable, Codable, Sendable {
         return VersionComparison.isVersion(currentVersion, olderThan: latestVersion)
     }
 
+    var canInstallAutomatically: Bool {
+        isUpdateAvailable && downloadURL != nil && sha256 != nil
+    }
+
+    func replacingVerification(sha256: String?, error: String?) -> AppUpdateStatus {
+        AppUpdateStatus(
+            currentVersion: currentVersion,
+            latestVersion: latestVersion,
+            downloadURL: downloadURL,
+            releasePageURL: releasePageURL,
+            feedURL: feedURL,
+            githubRepository: githubRepository,
+            assetName: assetName,
+            sha256: sha256,
+            checksumURL: checksumURL,
+            checkedAt: checkedAt,
+            error: error
+        )
+    }
+
     static let empty = AppUpdateStatus(
         currentVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0",
         latestVersion: nil,
@@ -145,6 +167,8 @@ struct AppUpdateStatus: Equatable, Codable, Sendable {
         feedURL: nil,
         githubRepository: nil,
         assetName: nil,
+        sha256: nil,
+        checksumURL: nil,
         checkedAt: nil,
         error: nil
     )
