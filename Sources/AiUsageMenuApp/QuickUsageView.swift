@@ -8,6 +8,7 @@ struct QuickUsageView: View {
     let close: () -> Void
 
     var body: some View {
+        #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             QuickPanelContent(
                 model: model,
@@ -17,17 +18,24 @@ struct QuickUsageView: View {
             )
             .glassEffect(.regular, in: .rect(cornerRadius: 24))
         } else {
-            QuickPanelContent(
-                model: model,
-                shortcutName: shortcutName,
-                openDashboard: openDashboard,
-                close: close
-            )
-            .background(.ultraThinMaterial, in: .rect(cornerRadius: 24))
-            .overlay {
-                RoundedRectangle(cornerRadius: 24)
-                    .stroke(HappeningsTheme.borderStrong, lineWidth: 1)
-            }
+            materialContent
+        }
+        #else
+        materialContent
+        #endif
+    }
+
+    private var materialContent: some View {
+        QuickPanelContent(
+            model: model,
+            shortcutName: shortcutName,
+            openDashboard: openDashboard,
+            close: close
+        )
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: 24))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24)
+                .stroke(HappeningsTheme.borderStrong, lineWidth: 1)
         }
     }
 }
