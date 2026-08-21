@@ -9,10 +9,13 @@ final class UsageViewModel {
     var isRefreshing = false
     var lastError: String?
     var isInstallingUpdate = false
+    private(set) var checkingVersionSourceIDs = Set<String>()
+    private(set) var isCheckingAppVersion = false
     var bridgeURLText = "Starting bridge..."
 
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var versionRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var activeVersionCheckID: UUID?
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var versionTimer: Timer?
     @ObservationIgnored private var fileWatcher: UsageFileWatcher?
@@ -34,7 +37,7 @@ final class UsageViewModel {
         }
         versionTimer = Timer.scheduledTimer(withTimeInterval: 15 * 60, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.refreshVersions()
+                self?.checkVersions()
             }
         }
         Task {
@@ -62,6 +65,10 @@ final class UsageViewModel {
         bridgeServer.pairingPayload?.encodedPairingURL()
     }
 
+    var isCheckingVersions: Bool {
+        !checkingVersionSourceIDs.isEmpty || isCheckingAppVersion
+    }
+
     func refresh() {
         refreshUsage(includeVersions: true)
     }
@@ -73,9 +80,6 @@ final class UsageViewModel {
 
     private func refreshUsage(includeVersions: Bool) {
         refreshTask?.cancel()
-        if includeVersions {
-            versionRefreshTask?.cancel()
-        }
         isRefreshing = true
         lastError = nil
 
@@ -96,22 +100,25 @@ final class UsageViewModel {
             isRefreshing = false
 
             if includeVersions {
-                refreshVersions()
+                checkVersions()
             }
         }
     }
 
-    private func refreshVersions() {
-        versionRefreshTask?.cancel()
+    func isCheckingVersion(_ source: UsageSource) -> Bool {
+        checkingVersionSourceIDs.contains(source.id)
+    }
+
+    func checkVersions() {
+        guard let checkID = beginVersionCheck(
+            sources: UsageSource.allCases,
+            includeApp: true
+        ) else { return }
         versionRefreshTask = Task {
             let checkedAt = Date()
-            // Version probes invoke subprocesses and network requests, so they
-            // deliberately run outside the main actor.
-            let versionSnapshot = await Task.detached(priority: .utility) {
-                VersionStore().load(now: checkedAt)
-            }.value
+            let versionSnapshot = await VersionStore().loadConcurrently(now: checkedAt)
 
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, activeVersionCheckID == checkID else { return }
             snapshot = UsageSnapshot(
                 generatedAt: snapshot.generatedAt,
                 summaries: snapshot.summaries,
@@ -119,6 +126,63 @@ final class UsageViewModel {
                 appUpdate: versionSnapshot.appUpdate
             )
             publishBridgeSnapshot()
+            finishVersionCheck(checkID)
+        }
+    }
+
+    func checkVersion(for source: UsageSource) {
+        guard let checkID = beginVersionCheck(
+            sources: [source],
+            includeApp: false
+        ) else { return }
+        versionRefreshTask = Task {
+            let checkedAt = Date()
+            let status = await VersionStore().loadVersionConcurrently(
+                for: source,
+                now: checkedAt
+            )
+
+            guard !Task.isCancelled, activeVersionCheckID == checkID else { return }
+            var versions = snapshot.cliVersions
+            if let index = versions.firstIndex(where: { $0.source == source }) {
+                versions[index] = status
+            } else {
+                versions.append(status)
+            }
+            versions.sort { lhs, rhs in
+                let lhsIndex = UsageSource.allCases.firstIndex(of: lhs.source) ?? .max
+                let rhsIndex = UsageSource.allCases.firstIndex(of: rhs.source) ?? .max
+                return lhsIndex < rhsIndex
+            }
+            snapshot = UsageSnapshot(
+                generatedAt: snapshot.generatedAt,
+                summaries: snapshot.summaries,
+                cliVersions: versions,
+                appUpdate: snapshot.appUpdate
+            )
+            publishBridgeSnapshot()
+            finishVersionCheck(checkID)
+        }
+    }
+
+    func checkAppVersion() {
+        guard let checkID = beginVersionCheck(
+            sources: [],
+            includeApp: true
+        ) else { return }
+        versionRefreshTask = Task {
+            let checkedAt = Date()
+            let appUpdate = await VersionStore().loadAppVersionConcurrently(now: checkedAt)
+
+            guard !Task.isCancelled, activeVersionCheckID == checkID else { return }
+            snapshot = UsageSnapshot(
+                generatedAt: snapshot.generatedAt,
+                summaries: snapshot.summaries,
+                cliVersions: snapshot.cliVersions,
+                appUpdate: appUpdate
+            )
+            publishBridgeSnapshot()
+            finishVersionCheck(checkID)
         }
     }
 
@@ -151,7 +215,7 @@ final class UsageViewModel {
 
     func installAppUpdate() {
         let update = snapshot.appUpdate
-        guard update.isUpdateAvailable, update.downloadURL != nil else {
+        guard update.canInstallAutomatically else {
             return
         }
 
@@ -159,7 +223,7 @@ final class UsageViewModel {
         lastError = nil
         Task.detached(priority: .userInitiated) {
             do {
-                try AppUpdater.install(update: update)
+                try await AppUpdater.install(update: update)
             } catch {
                 await MainActor.run {
                     self.lastError = error.localizedDescription
@@ -224,6 +288,30 @@ final class UsageViewModel {
     private func publishBridgeSnapshot() {
         bridgeServer.update(snapshot: snapshot)
         updateBridgeURLText()
+    }
+
+    private func beginVersionCheck(
+        sources: [UsageSource],
+        includeApp: Bool
+    ) -> UUID? {
+        guard activeVersionCheckID == nil else {
+            return nil
+        }
+        let checkID = UUID()
+        activeVersionCheckID = checkID
+        checkingVersionSourceIDs = Set(sources.map(\.id))
+        isCheckingAppVersion = includeApp
+        return checkID
+    }
+
+    private func finishVersionCheck(_ checkID: UUID) {
+        guard activeVersionCheckID == checkID else {
+            return
+        }
+        activeVersionCheckID = nil
+        versionRefreshTask = nil
+        checkingVersionSourceIDs.removeAll()
+        isCheckingAppVersion = false
     }
 
     private func updateBridgeURLText() {

@@ -2,7 +2,10 @@ import SwiftUI
 
 @main
 struct AiUsageMenuApp: App {
+    static let dashboardWindowID = "dashboard"
+
     @State private var model = UsageViewModel()
+    @State private var quickAccessController = QuickAccessController()
 
     init() {
         runBridgeSmokeIfRequested()
@@ -10,9 +13,28 @@ struct AiUsageMenuApp: App {
     }
 
     var body: some Scene {
+        WindowGroup("AI Usage", id: Self.dashboardWindowID) {
+            DesktopSceneView(
+                model: model,
+                quickAccessController: quickAccessController
+            )
+        }
+        .defaultSize(width: 1_280, height: 760)
+        .defaultPosition(.center)
+        .windowResizability(.contentMinSize)
+        .windowToolbarStyle(.unified(showsTitle: false))
+        .commands {
+            AIUsageCommands(
+                model: model,
+                quickAccessController: quickAccessController
+            )
+        }
+
         MenuBarExtra {
-            UsageDashboardView(model: model)
-                .frame(width: 390, height: 820)
+            MenuBarDashboardView(
+                model: model,
+                quickAccessController: quickAccessController
+            )
         } label: {
             Label {
                 Text(model.menuBarTitle)
@@ -24,8 +46,11 @@ struct AiUsageMenuApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            SettingsView(model: model)
-                .frame(width: 440)
+            SettingsView(
+                model: model,
+                quickAccessController: quickAccessController
+            )
+                .frame(width: 480)
                 .padding(20)
         }
     }
