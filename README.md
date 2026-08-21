@@ -1,12 +1,17 @@
-# AI Usage Menu
+# AI Usage
 
-AI Usage Menu is a small macOS menu bar app for tracking local AI coding CLI usage across Claude Code, OpenAI Codex CLI, Gemini CLI, and Grok CLI.
+AI Usage is a native macOS desktop and menu bar app for tracking local AI coding CLI usage across Claude Code, OpenAI Codex CLI, Gemini CLI, and Grok CLI.
 
 It reads local transcript files, displays rolling token usage, shows reset windows when the CLI exposes them, checks installed CLI versions, and can update itself from GitHub Releases.
+
+Signed DMG and one-command installs are included with releases starting at version 0.2.0. See [GitHub Releases](https://github.com/happenings-dk/ai-usage/releases) for published downloads.
 
 ## Features
 
 - Menu bar usage summary with the tightest live rate-limit percentage.
+- Full resizable desktop dashboard with a Dock icon.
+- Floating Quick Look panel available from a global keyboard shortcut.
+- Customizable one- or two-step Quick Look shortcut sequence in Settings (default: Shift-Command-U).
 - Claude, Codex, Gemini, and Grok usage cards.
 - Current 5 hour, today, and 7 day token totals.
 - Input, output, cached, billable, and total token breakdowns.
@@ -130,10 +135,26 @@ See the relay README for deployment, token rotation, and APNs secret setup. Fore
 
 ## Install On macOS
 
-Install the latest GitHub release into `~/Applications` and launch it:
+For signed releases starting at version 0.2.0, choose either installation path:
+
+> The current `v0.1.3` release predates secure distribution and is intentionally rejected. Use these options after `v0.2.0` is published; until then, use the local bundle instructions below.
+
+1. **Download:** Open the DMG from [GitHub Releases](https://github.com/happenings-dk/ai-usage/releases) and drag `AiUsageMenu.app` to Applications.
+2. **Terminal:** Install the latest release into `~/Applications` and launch it:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/happenings-dk/ai-usage/main/scripts/install.sh | bash
+```
+
+The terminal installer verifies the release checksum, expected bundle identifier, declared app version, Developer ID team, code signature, and Gatekeeper trust before replacing an existing copy. If installation fails, it restores the previous app. It rejects older releases without a checksum manifest.
+
+The app also checks GitHub Releases over the air. Automatic installation appears only when the release has a matching SHA-256 checksum and the downloaded app passes bundle ID, version, Happenings Developer ID, code-signature, and Gatekeeper validation. A dedicated helper swaps the bundles atomically and restores the previous app if launch fails.
+
+Install a specific version or skip launching it:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/happenings-dk/ai-usage/main/scripts/install.sh -o /tmp/install-ai-usage.sh
+bash /tmp/install-ai-usage.sh --version 0.2.0 --no-launch
 ```
 
 Override the install directory if needed:
@@ -150,7 +171,7 @@ scripts/package-app.sh
 open .build/release/AiUsageMenu.app
 ```
 
-The packaged app sets `LSUIElement`, so it appears in the menu bar without a Dock icon.
+The packaged app appears in the Dock as a normal desktop app and keeps its live menu bar item available for quick checks.
 
 Build metadata can be overridden:
 
@@ -163,21 +184,15 @@ scripts/package-app.sh
 
 ## Release On GitHub
 
-Create a release zip and update metadata:
+The automated workflow builds a universal Apple silicon and Intel app, verifies it, and publishes ZIP, DMG, checksum, and update-feed assets. Update `VERSION` and `CHANGELOG.md`, then push a matching tag:
 
 ```sh
-AI_USAGE_VERSION=0.2.0 scripts/package-release.sh
+version="$(tr -d '[:space:]' < VERSION)"
+git tag "v${version}"
+git push origin "v${version}"
 ```
 
-Upload the generated zip to a GitHub release:
-
-```sh
-gh release create v0.2.0 \
-  .build/dist/AIUsageMenu-0.2.0.zip \
-  .build/dist/update.json \
-  --title v0.2.0 \
-  --notes "AI Usage 0.2.0"
-```
+See [DISTRIBUTION.md](DISTRIBUTION.md) for Developer ID signing, notarization secrets, manual workflow runs, and local packaging.
 
 The app checks:
 
@@ -208,7 +223,8 @@ Feed format:
 ```json
 {
   "version": "0.2.0",
-  "download_url": "https://github.com/happenings-dk/ai-usage/releases/download/v0.2.0/AIUsageMenu-0.2.0.zip"
+  "download_url": "https://github.com/happenings-dk/ai-usage/releases/download/v0.2.0/AIUsageMenu-0.2.0.zip",
+  "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 }
 ```
 
@@ -233,4 +249,3 @@ open .build/release/AiUsageMenu.app
 - macOS 14 or later
 - Swift 6 toolchain for local builds
 - `jq` for the Claude status-line exporter
-- `npm` for latest CLI version checks
